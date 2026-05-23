@@ -2,49 +2,55 @@ const pool = require('../db');
 
 // расчет контракта
 const calculateContract = async (req, res) => {
-    const { itemIds, inputFloats } = req.body; 
-    // itemIds - массив из 10 id предметов, inputFloats - массив из 10 введенных флоатов
+    // targetItemId - id предмета, который ожидается получить
+    const { itemIds, inputFloats, targetItemId } = req.body; 
 
-    if (!itemIds || itemIds.length !== 10 || !inputFloats || inputFloats.length !== 10) {
-        return res.status(400).json({ error: 'контракт требует ровно 10 предметов и их показателей износа' });
+    if (!itemIds || itemIds.length !== 10 || !inputFloats || inputFloats.length !== 10 || !targetItemId) {
+        return res.status(400).json({ error: 'необходимы 10 предметов, их износ и целевой предмет' });
     }
 
     try {
-        await pool.query('BEGIN'); // начало транзакции
+        await pool.query('BEGIN');
 
-        // получаем цены входных предметов для расчета суммы входа
+        // получаем данные целевого предмета из бд
+        const target = await pool.query('SELECT price, min_float, max_float FROM items WHERE id = $1', [targetItemId]);
+        if (target.rows.length === 0) {
+            await pool.query('ROLLBACK');
+            return res.status(404).json({ error: 'целевой предмет не найден' });
+        }
+
+        const targetPrice = parseFloat(target.rows[0].price);
+        const targetMinFloat = target.rows[0].min_float;
+        const targetMaxFloat = target.rows[0].max_float;
+
+        // получаем цены входных предметов
         let totalCost = 0;
         for (let id of itemIds) {
             const item = await pool.query('SELECT price FROM items WHERE id = $1', [id]);
             if (item.rows.length > 0) totalCost += parseFloat(item.rows[0].price);
         }
 
-        // считаем средний флоат входа
+        // считаем средний износ входа
         const avgFloat = inputFloats.reduce((acc, val) => acc + val, 0) / 10;
-
-        // условные лимиты целевого предмета
-        const targetMinFloat = 0.00;
-        const targetMaxFloat = 1.00;
-        const targetPrice = 5000.00; 
 
         // формула расчета итогового износа
         const resultFloat = (avgFloat * (targetMaxFloat - targetMinFloat)) + targetMinFloat;
         const expectedProfit = targetPrice - totalCost;
 
-        // сохраняем результат в историю контрактов
+        // сохраняем результат
         const contract = await pool.query(
             'INSERT INTO contracts (user_id, input_items_cost, expected_profit, result_float) VALUES ($1, $2, $3, $4) RETURNING id',
             [req.user.id, totalCost, expectedProfit, resultFloat]
         );
         const contractId = contract.rows[0].id;
 
-        // группируем дубликаты предметов для использования поля quantity
+        // группируем дубликаты
         const itemCounts = {};
         for (let id of itemIds) {
             itemCounts[id] = (itemCounts[id] || 0) + 1;
         }
 
-        // привязка предметов к контракту в бд
+        // привязка к истории
         for (let id in itemCounts) {
             await pool.query(
                 'INSERT INTO contract_items (contract_id, item_id, quantity) VALUES ($1, $2, $3)',
@@ -52,7 +58,7 @@ const calculateContract = async (req, res) => {
             );
         }
 
-        await pool.query('COMMIT'); // подтверждение транзакции
+        await pool.query('COMMIT');
 
         res.json({
             contractId,
@@ -62,7 +68,7 @@ const calculateContract = async (req, res) => {
             message: 'расчет успешно выполнен'
         });
     } catch (err) {
-        await pool.query('ROLLBACK'); // откат транзакции при ошибке
+        await pool.query('ROLLBACK');
         res.status(500).json({ error: 'ошибка при расчете контракта' });
     }
 };
