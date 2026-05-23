@@ -113,4 +113,37 @@ const updateCollection = async (req, res) => {
     }
 };
 
-module.exports = { getUserCollections, getCollectionById, createCollection, updateCollection, deleteCollection };
+// экспорт сборки в формат CSV (для отчетности)
+const exportCollectionToCSV = async (req, res) => {
+    const { id } = req.params;
+    try {
+        // проверяем принадлежность сборки пользователю
+        const col = await pool.query('SELECT title FROM collections WHERE id = $1 AND user_id = $2', [id, req.user.id]);
+        if (col.rows.length === 0) return res.status(404).json({ error: 'сборка не найдена' });
+
+        // получаем предметы через кросс-таблицу
+        const items = await pool.query(`
+            SELECT i.market_name, i.weapon_type, i.rarity, i.exterior, i.price
+            FROM items i
+            JOIN collection_items ci ON i.id = ci.item_id
+            WHERE ci.collection_id = $1
+        `, [id]);
+
+        // формирование csv строки
+        let csvContent = '\uFEFF'; // BOM для корректного отображения кириллицы в Excel
+        csvContent += 'Название;Тип;Редкость;Качество;Цена (руб.)\n';
+        
+        for (let item of items.rows) {
+            csvContent += `"${item.market_name}";"${item.weapon_type}";"${item.rarity}";"${item.exterior}";${item.price}\n`;
+        }
+
+        // отправка файла пользователю
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename=collection_${id}.csv`);
+        res.status(200).send(csvContent);
+    } catch (err) {
+        res.status(500).json({ error: 'ошибка при экспорте сборки в CSV' });
+    }
+};
+
+module.exports = { getUserCollections, getCollectionById, createCollection, updateCollection, deleteCollection, exportCollectionToCSV };
