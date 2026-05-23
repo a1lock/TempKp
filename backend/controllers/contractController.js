@@ -2,7 +2,6 @@ const pool = require('../db');
 
 // расчет контракта
 const calculateContract = async (req, res) => {
-    // targetItemId - id предмета, который ожидается получить
     const { itemIds, inputFloats, targetItemId } = req.body; 
 
     if (!itemIds || itemIds.length !== 10 || !inputFloats || inputFloats.length !== 10 || !targetItemId) {
@@ -37,10 +36,10 @@ const calculateContract = async (req, res) => {
         const resultFloat = (avgFloat * (targetMaxFloat - targetMinFloat)) + targetMinFloat;
         const expectedProfit = targetPrice - totalCost;
 
-        // сохраняем результат
+        // сохраняем результат вместе с id полученного предмета
         const contract = await pool.query(
-            'INSERT INTO contracts (user_id, input_items_cost, expected_profit, result_float) VALUES ($1, $2, $3, $4) RETURNING id',
-            [req.user.id, totalCost, expectedProfit, resultFloat]
+            'INSERT INTO contracts (user_id, input_items_cost, expected_profit, result_float, result_item_id) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+            [req.user.id, totalCost, expectedProfit, resultFloat, targetItemId]
         );
         const contractId = contract.rows[0].id;
 
@@ -73,4 +72,20 @@ const calculateContract = async (req, res) => {
     }
 };
 
-module.exports = { calculateContract };
+// получение истории контрактов для личного кабинета
+const getContractHistory = async (req, res) => {
+    try {
+        const history = await pool.query(`
+            SELECT c.*, i.market_name as result_item_name, i.image_url as result_item_image
+            FROM contracts c
+            LEFT JOIN items i ON c.result_item_id = i.id
+            WHERE c.user_id = $1
+            ORDER BY c.created_at DESC
+        `, [req.user.id]);
+        res.json(history.rows);
+    } catch (err) {
+        res.status(500).json({ error: 'ошибка при получении истории расчетов' });
+    }
+};
+
+module.exports = { calculateContract, getContractHistory };

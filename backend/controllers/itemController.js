@@ -2,18 +2,40 @@ const pool = require('../db');
 const csv = require('csv-parser');
 const fs = require('fs');
 
-// получение каталога предметов с фильтрацией
+// получение каталога предметов с динамической фильтрацией
 const getItems = async (req, res) => {
     try {
-        const { color } = req.query;
-        let query = 'SELECT * FROM items';
+        const { color, type, exterior, minPrice, maxPrice } = req.query;
+        let query = 'SELECT * FROM items WHERE 1=1';
         let params = [];
-        
+        let paramIndex = 1;
+
         if (color) {
-            query += ' WHERE color_hex = $1';
+            query += ` AND color_hex = $${paramIndex}`;
             params.push(color);
+            paramIndex++;
         }
-        
+        if (type) {
+            query += ` AND weapon_type = $${paramIndex}`;
+            params.push(type);
+            paramIndex++;
+        }
+        if (exterior) {
+            query += ` AND exterior = $${paramIndex}`;
+            params.push(exterior);
+            paramIndex++;
+        }
+        if (minPrice) {
+            query += ` AND price >= $${paramIndex}`;
+            params.push(minPrice);
+            paramIndex++;
+        }
+        if (maxPrice) {
+            query += ` AND price <= $${paramIndex}`;
+            params.push(maxPrice);
+            paramIndex++;
+        }
+
         const items = await pool.query(query, params);
         res.json(items.rows);
     } catch (err) {
