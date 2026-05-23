@@ -39,8 +39,13 @@ const uploadPrices = (req, res) => {
                 fs.unlinkSync(req.file.path); // удаление временного файла
                 res.json({ message: 'цены успешно обновлены' });
             } catch (err) {
+                if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path); // удаление при ошибке СУБД
                 res.status(500).json({ error: 'ошибка при обновлении цен в базе данных' });
             }
+        })
+        .on('error', (err) => {
+            if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path); // удаление при ошибке чтения файла
+            res.status(500).json({ error: 'ошибка при обработке файла' });
         });
 };
 

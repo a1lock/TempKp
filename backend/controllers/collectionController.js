@@ -23,9 +23,10 @@ const createCollection = async (req, res) => {
         );
         const collectionId = newCol.rows[0].id;
 
-        // привязка предметов к коллекции
+        // привязка предметов к коллекции (фильтруем дубликаты для предотвращения ошибок бд)
         if (itemIds && itemIds.length > 0) {
-            for (let itemId of itemIds) {
+            const uniqueItemIds = [...new Set(itemIds)];
+            for (let itemId of uniqueItemIds) {
                 await pool.query(
                     'INSERT INTO collection_items (collection_id, item_id) VALUES ($1, $2)',
                     [collectionId, itemId]

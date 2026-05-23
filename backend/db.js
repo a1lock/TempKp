@@ -10,4 +10,9 @@ const pool = new Pool({
     database: process.env.DB_NAME,
 });
 
+// предотвращение падения сервера при непредвиденных ошибках пула
+pool.on('error', (err) => {
+    console.error('непредвиденная ошибка пула подключений к бд', err);
+});
+
 module.exports = pool;

@@ -10,6 +10,8 @@ const calculateContract = async (req, res) => {
     }
 
     try {
+        await pool.query('BEGIN'); // начало транзакции
+
         // получаем цены входных предметов для расчета суммы входа
         let totalCost = 0;
         for (let id of itemIds) {
@@ -20,10 +22,10 @@ const calculateContract = async (req, res) => {
         // считаем средний флоат входа
         const avgFloat = inputFloats.reduce((acc, val) => acc + val, 0) / 10;
 
-        // заглушка: берем случайные лимиты целевого предмета (в реальном проекте ищем цель в бд по редкости)
+        // условные лимиты целевого предмета
         const targetMinFloat = 0.00;
         const targetMaxFloat = 1.00;
-        const targetPrice = 5000.00; // условная цена результата
+        const targetPrice = 5000.00; 
 
         // формула расчета итогового износа
         const resultFloat = (avgFloat * (targetMaxFloat - targetMinFloat)) + targetMinFloat;
@@ -34,15 +36,33 @@ const calculateContract = async (req, res) => {
             'INSERT INTO contracts (user_id, input_items_cost, expected_profit, result_float) VALUES ($1, $2, $3, $4) RETURNING id',
             [req.user.id, totalCost, expectedProfit, resultFloat]
         );
+        const contractId = contract.rows[0].id;
+
+        // группируем дубликаты предметов для использования поля quantity
+        const itemCounts = {};
+        for (let id of itemIds) {
+            itemCounts[id] = (itemCounts[id] || 0) + 1;
+        }
+
+        // привязка предметов к контракту в бд
+        for (let id in itemCounts) {
+            await pool.query(
+                'INSERT INTO contract_items (contract_id, item_id, quantity) VALUES ($1, $2, $3)',
+                [contractId, id, itemCounts[id]]
+            );
+        }
+
+        await pool.query('COMMIT'); // подтверждение транзакции
 
         res.json({
-            contractId: contract.rows[0].id,
+            contractId,
             totalCost,
             expectedProfit,
             resultFloat,
             message: 'расчет успешно выполнен'
         });
     } catch (err) {
+        await pool.query('ROLLBACK'); // откат транзакции при ошибке
         res.status(500).json({ error: 'ошибка при расчете контракта' });
     }
 };
