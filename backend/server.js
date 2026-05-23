@@ -6,6 +6,7 @@ const authRoutes = require('./routes/authRoutes');
 const itemRoutes = require('./routes/itemRoutes');
 const collectionRoutes = require('./routes/collectionRoutes');
 const contractRoutes = require('./routes/contractRoutes');
+const userRoutes = require('./routes/userRoutes');
 
 const app = express();
 
@@ -15,6 +16,7 @@ app.use(express.json()); // парсинг json в теле запроса
 
 // подключение маршрутов
 app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
 app.use('/api/items', itemRoutes);
 app.use('/api/collections', collectionRoutes);
 app.use('/api/contracts', contractRoutes);
