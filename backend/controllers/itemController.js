@@ -54,11 +54,15 @@ const uploadPrices = (req, res) => {
         .on('end', async () => {
             try {
                 for (let row of results) {
-                    if (row.id && row.price) {
-                        const parsedPrice = parseFloat(row.price);
+                    // нормализация заголовков csv (поддержка разного регистра)
+                    const itemId = row.id || row.Id || row.ID;
+                    const itemPrice = row.price || row.Price || row.PRICE;
+
+                    if (itemId && itemPrice) {
+                        const parsedPrice = parseFloat(itemPrice);
                         // валидация цены перед сохранением
                         if (!isNaN(parsedPrice) && parsedPrice >= 0) {
-                            await pool.query('UPDATE items SET price = $1 WHERE id = $2', [parsedPrice, row.id]);
+                            await pool.query('UPDATE items SET price = $1 WHERE id = $2', [parsedPrice, itemId]);
                         }
                     }
                 }

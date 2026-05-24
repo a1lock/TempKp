@@ -23,11 +23,15 @@ const calculateContract = async (req, res) => {
         const targetMinFloat = target.rows[0].min_float;
         const targetMaxFloat = target.rows[0].max_float;
 
-        // получаем цены входных предметов
+        // получаем цены входных предметов с жесткой проверкой их существования
         let totalCost = 0;
         for (let id of itemIds) {
             const item = await client.query('SELECT price FROM items WHERE id = $1', [id]);
-            if (item.rows.length > 0) totalCost += parseFloat(item.rows[0].price);
+            if (item.rows.length === 0) {
+                await client.query('ROLLBACK');
+                return res.status(404).json({ error: `предмет с id ${id} не найден в базе данных` });
+            }
+            totalCost += parseFloat(item.rows[0].price);
         }
 
         // считаем средний износ входа
