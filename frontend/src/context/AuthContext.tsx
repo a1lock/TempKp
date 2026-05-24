@@ -1,4 +1,6 @@
-import { createContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useState } from 'react';
+import type { ReactNode } from 'react';
+
 import type { User } from '../types';
 
 interface AuthContextType {
@@ -10,16 +12,19 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
 const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
-
-  // проверка сохраненной сессии при старте
-  useEffect(() => {
+  // синхронно считываем данные из хранилища при инициализации состояния
+  const [user, setUser] = useState<User | null>(() => {
     const token = localStorage.getItem('token');
     const storedUser = localStorage.getItem('user');
     if (token && storedUser) {
-      setUser(JSON.parse(storedUser));
+      try {
+        return JSON.parse(storedUser);
+      } catch (e) {
+        return null;
+      }
     }
-  }, []);
+    return null;
+  });
 
   const login = (token: string, userData: User) => {
     localStorage.setItem('token', token);
@@ -40,4 +45,4 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
-export { AuthContext, AuthProvider };
+export { AuthProvider, AuthContext };
