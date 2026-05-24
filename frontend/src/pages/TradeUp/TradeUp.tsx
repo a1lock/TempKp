@@ -14,6 +14,8 @@ interface HistoryItem {
 const TradeUp = () => {
   const [items, setItems] = useState<Item[]>([]);
   const [slots, setSlots] = useState<(Item | null)[]>(Array(10).fill(null));
+  // хранение индивидуального износа для каждой из 10 ячеек
+  const [slotFloats, setSlotFloats] = useState<number[]>(Array(10).fill(0.15));
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [result, setResult] = useState<{
     input_items_cost: number;
@@ -23,6 +25,7 @@ const TradeUp = () => {
     success_chance: number;
     result_float: number;
     exterior_name: string;
+    outcomes?: { market_name: string; chance: number; profit: number }[];
   } | null>(null);
 
   useEffect(() => {
@@ -52,6 +55,11 @@ const TradeUp = () => {
       const newSlots = [...slots];
       newSlots[emptyIndex] = item;
       setSlots(newSlots);
+
+      // задаем начальный износ на основе параметров предмета
+      const newFloats = [...slotFloats];
+      newFloats[emptyIndex] = item.min_float !== undefined ? item.min_float : 0.15;
+      setSlotFloats(newFloats);
     }
   };
 
@@ -63,6 +71,7 @@ const TradeUp = () => {
 
   const handleClear = () => {
     setSlots(Array(10).fill(null));
+    setSlotFloats(Array(10).fill(0.15));
     setResult(null);
   };
 
@@ -73,11 +82,15 @@ const TradeUp = () => {
       return;
     }
 
+    // собираем предметы с их индивидуальными показателями износа
     const payload = {
-      items: activeSlots.map(item => ({
-        id: item.id,
-        float: item.exterior === 'Field-Tested' ? 0.38 : 0.05 
-      }))
+      items: slots.map((slot, idx) => {
+        if (!slot) return null;
+        return {
+          id: slot.id,
+          float: slotFloats[idx]
+        };
+      }).filter((item): item is { id: number; float: number } => item !== null)
     };
 
     try {
@@ -90,18 +103,30 @@ const TradeUp = () => {
     }
   };
 
-  // загрузка деталей контракта из истории при клике (новый метод)
+  // загрузка деталей контракта из истории при клике с распаковкой дубликатов
   const handleLoadDetails = async (id: number) => {
     try {
       const res = await api.get(`/contracts/${id}`);
-      // заполняем слоты предметами из истории
       const newSlots = Array(10).fill(null);
-      res.data.items.forEach((item: Item, index: number) => {
-        if (index < 10) newSlots[index] = item;
+      const newFloats = Array(10).fill(0.15);
+      let slotIndex = 0;
+
+      // распаковываем предметы по ячейкам на основе их количества в контракте
+      res.data.items.forEach((item: any) => {
+        const qty = item.quantity || 1;
+        for (let i = 0; i < qty; i++) {
+          if (slotIndex < 10) {
+            newSlots[slotIndex] = item;
+            newFloats[slotIndex] = item.float_value !== undefined ? item.float_value : (item.min_float || 0.15);
+            slotIndex++;
+          }
+        }
       });
+
       setSlots(newSlots);
+      setSlotFloats(newFloats);
       
-      // имитируем вывод результатов для этого контракта
+      // выводим результаты для выбранного из истории контракта
       setResult({
         input_items_cost: Number(res.data.input_items_cost),
         expected_profit: Number(res.data.expected_profit),
@@ -114,6 +139,67 @@ const TradeUp = () => {
     } catch (err) {
       alert('ошибка при загрузке деталей контракта');
     }
+  };
+
+  // расчет возможных исходов для отображения карточек в прогнозе
+  const getPossibleOutcomes = () => {
+    if (result && result.outcomes) {
+      return result.outcomes;
+    }
+
+    const activeSlots = slots.filter(s => s !== null) as Item[];
+    if (activeSlots.length === 0 || !result) return [];
+
+    // определяем уникальные коллекции входных предметов
+    const collections = Array.from(new Set(activeSlots.map(s => {
+      if (s.market_name.includes('Ticket to Hell') || s.market_name.includes('Night Terror')) {
+        return 'Dreams & Nightmares';
+      }
+      if (s.market_name.includes('Slate') || s.market_name.includes('Clear Polymer')) {
+        return 'Snakebite';
+      }
+      return '';
+    }).filter(Boolean)));
+
+    if (collections.length === 0) return [];
+
+    const inputRarity = activeSlots[0].rarity;
+    let targetRarity = 'Засекреченное';
+    if (inputRarity === 'Засекреченное') {
+      targetRarity = 'Тайное';
+    }
+
+    // сопоставляем рассчитанный float с доступными в базе качествами
+    const getExteriorByFloat = (f: number): string => {
+      if (f < 0.15) return 'Factory New';
+      if (f >= 0.15 && f < 0.45) return 'Field-Tested';
+      return 'Battle-Scarred';
+    };
+
+    const expectedExterior = getExteriorByFloat(result.result_float);
+
+    // фильтруем предметы по качеству, убирая дублирующиеся варианты износа
+    const possibleTargets = items.filter(i => 
+      i.rarity === targetRarity && 
+      i.exterior === expectedExterior && // оставляем только ожидаемый износ
+      collections.some(c => {
+        if (c === 'Dreams & Nightmares') return i.market_name.includes('Rapid Eye') || i.market_name.includes('Abyssal') || i.market_name.includes('Starlight');
+        if (c === 'Snakebite') return i.market_name.includes('Living Color') || i.market_name.includes('Traitor') || i.market_name.includes('Food Chain');
+        return false;
+      })
+    );
+
+    const totalInputCost = activeSlots.reduce((sum, i) => sum + Number(i.price), 0);
+    const chance = Math.round(100 / possibleTargets.length);
+
+    return possibleTargets.map(t => {
+      const profit = Math.round(Number(t.price) - totalInputCost);
+      return {
+        market_name: t.market_name,
+        chance: chance,
+        profit: profit
+      };
+    });
   };
 
   return (
@@ -129,12 +215,29 @@ const TradeUp = () => {
         {slots.map((slot, idx) => (
           <div 
             key={idx} 
-            className="bg-[#1A1B23] border border-gray-800 rounded-xl p-4 flex flex-col items-center justify-between text-center min-h-[140px]"
+            className="bg-[#1A1B23] border border-gray-800 rounded-xl p-4 flex flex-col items-center justify-between text-center min-h-[160px]"
           >
             {slot ? (
               <>
                 <span className="text-xs font-semibold">{slot.market_name}</span>
-                <span className="text-xs text-[#FF9408] font-bold mt-2">0.38</span>
+                
+                {/* интерактивное поле изменения износа для каждого предмета */}
+                <div className="w-full my-2">
+                  <input 
+                    type="number" 
+                    step="0.0001" 
+                    min="0" 
+                    max="1" 
+                    value={slotFloats[idx]}
+                    onChange={(e) => {
+                      const newFloats = [...slotFloats];
+                      newFloats[idx] = parseFloat(e.target.value) || 0;
+                      setSlotFloats(newFloats);
+                    }}
+                    className="w-full bg-[#0F1014] text-white text-center text-xs p-1 rounded border border-gray-700 outline-none"
+                  />
+                </div>
+
                 <button 
                   onClick={() => handleRemoveItem(idx)} 
                   className="text-red-500 text-xs mt-auto hover:underline"
@@ -177,7 +280,7 @@ const TradeUp = () => {
           <h3 className="bg-[#2D2E37] px-4 py-2 text-xs font-bold w-fit rounded mb-6">
             Прогноз контракта
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
             <div>
               <span className="text-xs text-gray-400 block mb-1">Шанс исхода</span>
               <span className="text-2xl font-extrabold">{result.success_chance}%</span>
@@ -191,11 +294,29 @@ const TradeUp = () => {
             <div>
               <span className="text-xs text-gray-400 block mb-1">Прогноз Float</span>
               <span className="text-2xl font-extrabold">{result.result_float.toFixed(3)}</span>
-              <span className="text-xs text-gray-500 block mt-1">({result.exterior_name})</span>
+              <span className="text-xs text-gray-500 block mt-1">(по расчетам)</span>
             </div>
             <div>
               <span className="text-xs text-gray-400 block mb-1">Сумма входа</span>
               <span className="text-2xl font-extrabold text-white">{result.input_items_cost} ₽</span>
+            </div>
+          </div>
+
+          {/* карточки возможных результатов контракта */}
+          <div className="border-t border-gray-800 pt-6">
+            <h4 className="text-xs text-gray-400 uppercase font-bold mb-4">Возможные исходы контракта:</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {getPossibleOutcomes().map((outcome: any, idx: number) => (
+                <div key={idx} className="bg-[#0F1014] p-4 rounded-lg border border-gray-800 flex flex-col justify-between">
+                  <span className="text-xs font-bold text-white truncate">{outcome.market_name}</span>
+                  <div className="flex justify-between items-center mt-3">
+                    <span className="text-[10px] text-[#FF9408]">Шанс: {outcome.chance}%</span>
+                    <span className={`text-xs font-bold ${outcome.profit >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                      {outcome.profit >= 0 ? '+' : ''}{outcome.profit} ₽
+                    </span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -233,10 +354,12 @@ const TradeUp = () => {
                   {new Date(h.created_at).toLocaleDateString()}
                 </span>
                 <span className="text-sm font-bold block text-white">
-                  Результат: {h.result_name}
+                  Ожидаемый профит: <span className={Number(h.expected_profit) >= 0 ? 'text-green-500' : 'text-red-500'}>
+                    {Number(h.expected_profit) >= 0 ? '+' : ''}{Number(h.expected_profit)} ₽
+                  </span>
                 </span>
                 <span className="text-xs text-gray-400">
-                  Вычисленный Float: {Number(h.result_float).toFixed(4)}
+                  Флоат: {Number(h.result_float).toFixed(4)}
                 </span>
               </div>
               <span className="text-[#FF9408] font-bold">{Number(h.input_items_cost)} ₽</span>
