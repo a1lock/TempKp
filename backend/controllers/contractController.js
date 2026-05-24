@@ -8,13 +8,14 @@ const calculateContract = async (req, res) => {
         return res.status(400).json({ error: 'необходимы 10 предметов, их износ и целевой предмет' });
     }
 
+    const client = await pool.connect(); // получаем выделенного клиента из пула
     try {
-        await pool.query('BEGIN');
+        await client.query('BEGIN');
 
         // получаем данные целевого предмета из бд
-        const target = await pool.query('SELECT price, min_float, max_float FROM items WHERE id = $1', [targetItemId]);
+        const target = await client.query('SELECT price, min_float, max_float FROM items WHERE id = $1', [targetItemId]);
         if (target.rows.length === 0) {
-            await pool.query('ROLLBACK');
+            await client.query('ROLLBACK');
             return res.status(404).json({ error: 'целевой предмет не найден' });
         }
 
@@ -25,7 +26,7 @@ const calculateContract = async (req, res) => {
         // получаем цены входных предметов
         let totalCost = 0;
         for (let id of itemIds) {
-            const item = await pool.query('SELECT price FROM items WHERE id = $1', [id]);
+            const item = await client.query('SELECT price FROM items WHERE id = $1', [id]);
             if (item.rows.length > 0) totalCost += parseFloat(item.rows[0].price);
         }
 
@@ -36,8 +37,8 @@ const calculateContract = async (req, res) => {
         const resultFloat = (avgFloat * (targetMaxFloat - targetMinFloat)) + targetMinFloat;
         const expectedProfit = targetPrice - totalCost;
 
-        // сохраняем результат вместе с id полученного предмета
-        const contract = await pool.query(
+        // сохраняем результат
+        const contract = await client.query(
             'INSERT INTO contracts (user_id, input_items_cost, expected_profit, result_float, result_item_id) VALUES ($1, $2, $3, $4, $5) RETURNING id',
             [req.user.id, totalCost, expectedProfit, resultFloat, targetItemId]
         );
@@ -51,13 +52,13 @@ const calculateContract = async (req, res) => {
 
         // привязка к истории
         for (let id in itemCounts) {
-            await pool.query(
+            await client.query(
                 'INSERT INTO contract_items (contract_id, item_id, quantity) VALUES ($1, $2, $3)',
                 [contractId, id, itemCounts[id]]
             );
         }
 
-        await pool.query('COMMIT');
+        await client.query('COMMIT');
 
         res.json({
             contractId,
@@ -67,8 +68,10 @@ const calculateContract = async (req, res) => {
             message: 'расчет успешно выполнен'
         });
     } catch (err) {
-        await pool.query('ROLLBACK');
+        await client.query('ROLLBACK');
         res.status(500).json({ error: 'ошибка при расчете контракта' });
+    } finally {
+        client.release(); // освобождаем клиента
     }
 };
 

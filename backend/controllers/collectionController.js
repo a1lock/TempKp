@@ -3,56 +3,10 @@ const pool = require('../db');
 // получение коллекций текущего пользователя
 const getUserCollections = async (req, res) => {
     try {
-        const collections = await pool.query('SELECT * FROM collections WHERE user_id = $1', [req.user.id]);
+        const collections = await pool.query('SELECT * FROM collections WHERE user_id = $1 ORDER BY created_at DESC', [req.user.id]);
         res.json(collections.rows);
     } catch (err) {
         res.status(500).json({ error: 'ошибка при получении сборок' });
-    }
-};
-
-// создание новой сборки
-const createCollection = async (req, res) => {
-    const { title, itemIds } = req.body; // itemIds - массив id предметов
-    try {
-        await pool.query('BEGIN'); // начало транзакции
-
-        // создание записи коллекции
-        const newCol = await pool.query(
-            'INSERT INTO collections (user_id, title) VALUES ($1, $2) RETURNING id',
-            [req.user.id, title]
-        );
-        const collectionId = newCol.rows[0].id;
-
-        // привязка предметов к коллекции (фильтруем дубликаты для предотвращения ошибок бд)
-        if (itemIds && itemIds.length > 0) {
-            const uniqueItemIds = [...new Set(itemIds)];
-            for (let itemId of uniqueItemIds) {
-                await pool.query(
-                    'INSERT INTO collection_items (collection_id, item_id) VALUES ($1, $2)',
-                    [collectionId, itemId]
-                );
-            }
-        }
-
-        await pool.query('COMMIT'); // подтверждение транзакции
-        res.status(201).json({ id: collectionId, title, message: 'сборка успешно создана' });
-    } catch (err) {
-        await pool.query('ROLLBACK'); // откат при ошибке
-        res.status(500).json({ error: 'ошибка при создании сборки' });
-    }
-};
-
-// удаление сборки
-const deleteCollection = async (req, res) => {
-    const { id } = req.params;
-    try {
-        // удаляем только если сборка принадлежит пользователю
-        const result = await pool.query('DELETE FROM collections WHERE id = $1 AND user_id = $2 RETURNING id', [id, req.user.id]);
-        if (result.rows.length === 0) return res.status(404).json({ error: 'сборка не найдена или нет прав' });
-        
-        res.json({ message: 'сборка удалена' });
-    } catch (err) {
-        res.status(500).json({ error: 'ошибка при удалении сборки' });
     }
 };
 
@@ -60,11 +14,9 @@ const deleteCollection = async (req, res) => {
 const getCollectionById = async (req, res) => {
     const { id } = req.params;
     try {
-        // проверяем принадлежность сборки пользователю
         const col = await pool.query('SELECT * FROM collections WHERE id = $1 AND user_id = $2', [id, req.user.id]);
         if (col.rows.length === 0) return res.status(404).json({ error: 'сборка не найдена' });
 
-        // получаем предметы через кросс-таблицу
         const items = await pool.query(`
             SELECT i.* FROM items i
             JOIN collection_items ci ON i.id = ci.item_id
@@ -77,51 +29,102 @@ const getCollectionById = async (req, res) => {
     }
 };
 
-// обновление существующей сборки
+// создание новой сборки (транзакция через выделенного клиента)
+const createCollection = async (req, res) => {
+    const { title, itemIds } = req.body;
+    if (!title || !title.trim()) {
+        return res.status(400).json({ error: 'название сборки не может быть пустым' });
+    }
+
+    const client = await pool.connect(); // получаем выделенного клиента из пула
+    try {
+        await client.query('BEGIN');
+
+        const newCol = await client.query(
+            'INSERT INTO collections (user_id, title) VALUES ($1, $2) RETURNING id',
+            [req.user.id, title]
+        );
+        const collectionId = newCol.rows[0].id;
+
+        if (itemIds && itemIds.length > 0) {
+            const uniqueItemIds = [...new Set(itemIds)];
+            for (let itemId of uniqueItemIds) {
+                await client.query(
+                    'INSERT INTO collection_items (collection_id, item_id) VALUES ($1, $2)',
+                    [collectionId, itemId]
+                );
+            }
+        }
+
+        await client.query('COMMIT');
+        res.status(201).json({ id: collectionId, title, message: 'сборка успешно создана' });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ error: 'ошибка при создании сборки' });
+    } finally {
+        client.release(); // освобождаем клиента
+    }
+};
+
+// обновление существующей сборки (транзакция через выделенного клиента)
 const updateCollection = async (req, res) => {
     const { id } = req.params;
     const { title, itemIds } = req.body;
+
+    const client = await pool.connect();
     try {
-        await pool.query('BEGIN'); // начало транзакции
+        await client.query('BEGIN');
         
-        // обновление названия
         if (title) {
-            const result = await pool.query('UPDATE collections SET title = $1 WHERE id = $2 AND user_id = $3 RETURNING id', [title, id, req.user.id]);
+            if (!title.trim()) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ error: 'название сборки не может быть пустым' });
+            }
+            const result = await client.query('UPDATE collections SET title = $1 WHERE id = $2 AND user_id = $3 RETURNING id', [title, id, req.user.id]);
             if (result.rows.length === 0) {
-                await pool.query('ROLLBACK');
+                await client.query('ROLLBACK');
                 return res.status(404).json({ error: 'сборка не найдена или нет прав' });
             }
         }
 
-        // пересобираем предметы, если передан новый массив
         if (itemIds) {
-            // удаляем старые связи
-            await pool.query('DELETE FROM collection_items WHERE collection_id = $1', [id]);
-            
-            // добавляем новые связи (с защитой от дубликатов)
+            await client.query('DELETE FROM collection_items WHERE collection_id = $1', [id]);
             const uniqueItemIds = [...new Set(itemIds)];
             for (let itemId of uniqueItemIds) {
-                await pool.query('INSERT INTO collection_items (collection_id, item_id) VALUES ($1, $2)', [id, itemId]);
+                await client.query('INSERT INTO collection_items (collection_id, item_id) VALUES ($1, $2)', [id, itemId]);
             }
         }
 
-        await pool.query('COMMIT');
+        await client.query('COMMIT');
         res.json({ message: 'сборка успешно обновлена' });
     } catch (err) {
-        await pool.query('ROLLBACK');
+        await client.query('ROLLBACK');
         res.status(500).json({ error: 'ошибка при обновлении сборки' });
+    } finally {
+        client.release();
     }
 };
 
-// экспорт сборки в формат CSV (для отчетности)
+// удаление сборки
+const deleteCollection = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await pool.query('DELETE FROM collections WHERE id = $1 AND user_id = $2 RETURNING id', [id, req.user.id]);
+        if (result.rows.length === 0) return res.status(404).json({ error: 'сборка не найдена или нет прав' });
+        
+        res.json({ message: 'сборка удалена' });
+    } catch (err) {
+        res.status(500).json({ error: 'ошибка при удалении сборки' });
+    }
+};
+
+// экспорт сборки в формат CSV
 const exportCollectionToCSV = async (req, res) => {
     const { id } = req.params;
     try {
-        // проверяем принадлежность сборки пользователю
         const col = await pool.query('SELECT title FROM collections WHERE id = $1 AND user_id = $2', [id, req.user.id]);
         if (col.rows.length === 0) return res.status(404).json({ error: 'сборка не найдена' });
 
-        // получаем предметы через кросс-таблицу
         const items = await pool.query(`
             SELECT i.market_name, i.weapon_type, i.rarity, i.exterior, i.price
             FROM items i
@@ -129,15 +132,13 @@ const exportCollectionToCSV = async (req, res) => {
             WHERE ci.collection_id = $1
         `, [id]);
 
-        // формирование csv строки
-        let csvContent = '\uFEFF'; // BOM для корректного отображения кириллицы в Excel
+        let csvContent = '\uFEFF'; 
         csvContent += 'Название;Тип;Редкость;Качество;Цена (руб.)\n';
         
         for (let item of items.rows) {
             csvContent += `"${item.market_name}";"${item.weapon_type}";"${item.rarity}";"${item.exterior}";${item.price}\n`;
         }
 
-        // отправка файла пользователю
         res.setHeader('Content-Type', 'text/csv; charset=utf-8');
         res.setHeader('Content-Disposition', `attachment; filename=collection_${id}.csv`);
         res.status(200).send(csvContent);

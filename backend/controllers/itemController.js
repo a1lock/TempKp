@@ -55,18 +55,22 @@ const uploadPrices = (req, res) => {
             try {
                 for (let row of results) {
                     if (row.id && row.price) {
-                        await pool.query('UPDATE items SET price = $1 WHERE id = $2', [row.price, row.id]);
+                        const parsedPrice = parseFloat(row.price);
+                        // валидация цены перед сохранением
+                        if (!isNaN(parsedPrice) && parsedPrice >= 0) {
+                            await pool.query('UPDATE items SET price = $1 WHERE id = $2', [parsedPrice, row.id]);
+                        }
                     }
                 }
                 fs.unlinkSync(req.file.path); // удаление временного файла
                 res.json({ message: 'цены успешно обновлены' });
             } catch (err) {
-                if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path); // удаление при ошибке СУБД
+                if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
                 res.status(500).json({ error: 'ошибка при обновлении цен в базе данных' });
             }
         })
         .on('error', (err) => {
-            if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path); // удаление при ошибке чтения файла
+            if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
             res.status(500).json({ error: 'ошибка при обработке файла' });
         });
 };
