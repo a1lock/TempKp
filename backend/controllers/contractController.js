@@ -9,16 +9,16 @@ const getExteriorName = (floatVal) => {
   return 'закаленное в боях';
 };
 
+// расчет и сохранение контракта
 const calculateContract = async (req, res) => {
   let client;
   try {
-    const { items } = req.body; // ожидаем массив [{ id: 5, float: 0.38 }, ...]
+    const { items } = req.body;
 
     if (!items || items.length !== 10) {
       return res.status(400).json({ error: 'Необходимо передать ровно 10 предметов' });
     }
 
-    // получаем информацию о предметах из базы данных
     const itemIds = items.map(i => i.id);
     const { rows: dbItems } = await db.query(
       'SELECT * FROM items WHERE id = ANY($1)',
@@ -29,7 +29,6 @@ const calculateContract = async (req, res) => {
       return res.status(400).json({ error: 'Предметы не найдены в базе данных' });
     }
 
-    // собираем карту предметов для быстрого доступа
     const dbItemsMap = {};
     dbItems.forEach(item => {
       dbItemsMap[item.id] = item;
@@ -49,7 +48,6 @@ const calculateContract = async (req, res) => {
 
     const averageFloat = sumFloats / 10;
 
-    // определяем целевую редкость по первому предмету
     const firstItem = dbItemsMap[items[0].id];
     let targetRarity = '';
     if (firstItem.rarity === 'Запрещенное') targetRarity = 'Засекреченное';
@@ -58,7 +56,6 @@ const calculateContract = async (req, res) => {
       return res.status(400).json({ error: 'Из предметов данной редкости нельзя провести контракт' });
     }
 
-    // ищем возможные исходы из базы данных
     const { rows: possibleOutputs } = await db.query(
       'SELECT * FROM items WHERE rarity = $1',
       [targetRarity]
@@ -68,7 +65,6 @@ const calculateContract = async (req, res) => {
       return res.status(400).json({ error: 'Нет возможных исходов для данного контракта' });
     }
 
-    // считаем математику для каждого возможного исхода по формуле
     const outcomes = possibleOutputs.map(output => {
       const minF = Number(output.min_float);
       const maxF = Number(output.max_float);
@@ -84,7 +80,6 @@ const calculateContract = async (req, res) => {
       };
     });
 
-    // агрегируем показатели для вывода
     const profits = outcomes.map(o => o.profit);
     const minProfit = Math.min(...profits);
     const maxProfit = Math.max(...profits);
@@ -93,18 +88,16 @@ const calculateContract = async (req, res) => {
     const positiveOutcomes = outcomes.filter(o => o.profit > 0);
     const successChance = (positiveOutcomes.length / outcomes.length) * 100;
 
-    // подключаемся к пулу для выполнения транзакции записи контракта в историю
     client = await db.connect();
     await client.query('BEGIN');
 
-    // вставляем запись контракта (результирующий предмет больше не записывается)
     const insertContractQuery = `
       INSERT INTO contracts (user_id, input_items_cost, expected_profit, result_float)
       VALUES ($1, $2, $3, $4)
       RETURNING id
     `;
     const { rows: contractRows } = await client.query(insertContractQuery, [
-      req.user.id, // берется из middleware авторизации
+      req.user.id,
       totalInputCost,
       Math.round(averageProfit),
       averageFloat
@@ -112,7 +105,6 @@ const calculateContract = async (req, res) => {
 
     const contractId = contractRows[0].id;
 
-    // сохраняем связи входных предметов с созданным контрактом
     const insertItemQuery = `
       INSERT INTO contract_items (contract_id, item_id, quantity)
       VALUES ($1, $2, 1)
@@ -127,7 +119,6 @@ const calculateContract = async (req, res) => {
     await client.query('COMMIT');
     client.release();
 
-    // отдаем готовый расчет на фронтенд
     res.json({
       input_items_cost: totalInputCost,
       expected_profit: Math.round(averageProfit),
@@ -148,21 +139,93 @@ const calculateContract = async (req, res) => {
   }
 };
 
-// получение истории контрактов пользователя (простой запрос без join по результату)
+// получение истории контрактов с динамическим определением имени результата
 const getContractHistory = async (req, res) => {
   try {
-    const { rows } = await db.query(
+    const { rows: contracts } = await db.query(
       'SELECT id, input_items_cost, expected_profit, result_float, created_at FROM contracts WHERE user_id = $1 ORDER BY created_at DESC',
       [req.user.id]
     );
-    res.json(rows);
+
+    const historyWithNames = [];
+
+    // динамически определяем возможный результат для отображения в истории
+    for (const contract of contracts) {
+      const { rows: inputs } = await db.query(
+        'SELECT i.rarity FROM contract_items ci JOIN items i ON ci.item_id = i.id WHERE ci.contract_id = $1 LIMIT 1',
+        [contract.id]
+      );
+
+      let resultName = 'Неизвестно';
+
+      if (inputs.length > 0) {
+        const inputRarity = inputs[0].rarity;
+        let targetRarity = '';
+        if (inputRarity === 'Запрещенное') targetRarity = 'Засекреченное';
+        else if (inputRarity === 'Засекреченное') targetRarity = 'Тайное';
+
+        if (targetRarity) {
+          const { rows: outputs } = await db.query(
+            'SELECT market_name FROM items WHERE rarity = $1 LIMIT 1',
+            [targetRarity]
+          );
+          if (outputs.length > 0) {
+            // убираем качество из скобок для красивого вывода
+            resultName = outputs[0].market_name.split(' (')[0]; 
+          }
+        }
+      }
+
+      historyWithNames.push({
+        ...contract,
+        result_name: resultName
+      });
+    }
+
+    res.json(historyWithNames);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Ошибка получения истории контрактов' });
   }
 };
 
+// получение детальной информации о конкретном контракте по id (новый эндпоинт)
+const getContractDetails = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { rows: contractRows } = await db.query(
+      'SELECT id, input_items_cost, expected_profit, result_float, created_at FROM contracts WHERE id = $1 AND user_id = $2',
+      [id, req.user.id]
+    );
+
+    if (contractRows.length === 0) {
+      return res.status(404).json({ error: 'Контракт не найден' });
+    }
+
+    const contract = contractRows[0];
+
+    // собираем список предметов, которые участвовали в этом контракте
+    const { rows: inputItems } = await db.query(
+      `SELECT i.*, ci.quantity 
+       FROM contract_items ci
+       JOIN items i ON ci.item_id = i.id
+       WHERE ci.contract_id = $1`,
+      [id]
+    );
+
+    res.json({
+      ...contract,
+      items: inputItems
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Ошибка при получении деталей контракта' });
+  }
+};
+
 module.exports = {
   calculateContract,
-  getContractHistory
+  getContractHistory,
+  getContractDetails
 };
