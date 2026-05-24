@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../api';
 import type { Item, Collection } from '../../types';
+import { Search } from 'lucide-react';
+
 
 const SetBuilder = () => {
   const [items, setItems] = useState<Item[]>([]);
