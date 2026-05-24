@@ -36,6 +36,6 @@ const Navbar = () => {
       </div>
     </header>
   );
-}
+};
 
 export default Navbar;

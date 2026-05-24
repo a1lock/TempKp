@@ -1,15 +1,17 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../api';
-import { Item } from '../../types';
-import { Search } from 'lucide-react';
+import type { Item } from '../../types';
 
 const Market = () => {
   const [items, setItems] = useState<Item[]>([]);
   const [search, setSearch] = useState('');
   const [colorFilter, setColorFilter] = useState('');
 
+  // запрос за предметами
   useEffect(() => {
-    api.get('/items').then(res => setItems(res.data)).catch(console.error);
+    api.get('/items')
+      .then(res => setItems(res.data))
+      .catch(() => alert('ошибка загрузки каталога'));
   }, []);
 
   const filteredItems = items.filter(item => 
@@ -22,14 +24,13 @@ const Market = () => {
       <aside className="w-full md:w-64 bg-[#1A1B23] p-6 rounded-xl h-fit shrink-0 border border-gray-800">
         <h3 className="text-white font-bold text-lg mb-4">Фильтры</h3>
         
-        <div className="relative mb-6">
+        <div className="mb-6">
           <input 
             type="text" 
-            placeholder="Поиск..." 
-            className="w-full bg-[#0F1014] text-white p-2 pl-8 rounded border border-gray-700 outline-none"
+            placeholder="Поиск по названию..." 
+            className="w-full bg-[#0F1014] text-white p-2 rounded border border-gray-700 outline-none"
             value={search} onChange={(e) => setSearch(e.target.value)}
           />
-          <Search className="absolute left-2 top-2.5 text-gray-500" size={18} />
         </div>
 
         <div>
@@ -51,12 +52,15 @@ const Market = () => {
         {filteredItems.map(item => (
           <div key={item.id} className="bg-[#1A1B23] p-4 rounded-xl flex flex-col border border-gray-800">
             <div className="w-full h-1 rounded-t-xl mb-4" style={{ backgroundColor: item.color_hex }} />
-            <div className="h-32 mb-4 bg-gray-800 rounded flex items-center justify-center text-gray-500">
-              <span className="text-xs">img: {item.image_url}</span>
+            
+            {/* вывод картинки из папки public/img */}
+            <div className="h-32 mb-4 flex items-center justify-center">
+              <img src={`/img/${item.image_url}`} alt={item.market_name} className="max-h-full object-contain" />
             </div>
+
             <div className="mt-auto">
               <p className="text-gray-400 text-xs">{item.weapon_type}</p>
-              <h4 className="text-white font-bold text-sm truncate">{item.market_name}</h4>
+              <h4 className="text-white font-bold text-sm truncate" title={item.market_name}>{item.market_name}</h4>
               <p className="text-[#FF9408] font-bold mt-2">{Number(item.price)} ₽</p>
             </div>
           </div>
@@ -64,6 +68,6 @@ const Market = () => {
       </main>
     </div>
   );
-}
+};
 
 export default Market;

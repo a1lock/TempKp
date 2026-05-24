@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../api';
-import { Item, Collection } from '../../types';
+import type { Item, Collection } from '../../types';
 
 const SetBuilder = () => {
   const [items, setItems] = useState<Item[]>([]);
@@ -13,7 +13,6 @@ const SetBuilder = () => {
     fetchCollections();
   }, []);
 
-  // получение списка коллекций (чтение - read)
   const fetchCollections = async () => {
     try {
       const res = await api.get('/collections');
@@ -23,7 +22,6 @@ const SetBuilder = () => {
     }
   };
 
-  // сохранение коллекции (создание - create)
   const handleSave = async () => {
     if (selectedItems.length === 0) return alert('добавьте предметы');
     try {
@@ -36,7 +34,6 @@ const SetBuilder = () => {
     }
   };
 
-  // удаление коллекции (удаление - delete)
   const handleDelete = async (id: number) => {
     try {
       await api.delete(`/collections/${id}`);
@@ -46,10 +43,8 @@ const SetBuilder = () => {
     }
   };
 
-  // выгрузка в csv (требование работы с файлами)
   const handleExportCSV = () => {
     if (selectedItems.length === 0) return alert('нет предметов для экспорта');
-    // bom-префикс для правильной кодировки в excel
     const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
       + "Название,Оружие,Цена\n" 
       + selectedItems.map(i => `${i.market_name},${i.weapon_type},${i.price}`).join("\n");
@@ -69,26 +64,30 @@ const SetBuilder = () => {
     <div className="max-w-[1440px] mx-auto p-6 flex flex-col md:flex-row gap-6">
       <div className="flex-1">
         <h2 className="text-2xl text-white font-bold mb-6">Конструктор наборов</h2>
-        <div className="bg-[#1A1B23] p-4 rounded-xl border border-gray-800 mb-6 min-h-[200px]">
-          <h3 className="text-gray-400 mb-4">Текущий состав:</h3>
+        <div className="bg-[#1A1B23] p-4 rounded-xl border border-gray-800 mb-6 min-h-[150px]">
+          <h3 className="text-gray-400 mb-4 text-sm">Текущий состав (кликните чтобы убрать):</h3>
           <div className="flex flex-wrap gap-2">
             {selectedItems.map((item, idx) => (
-              <div key={idx} className="bg-[#0F1014] text-white p-2 rounded flex items-center gap-2 text-sm border border-gray-700">
-                <span>{item.market_name}</span>
-                <button onClick={() => setSelectedItems(selectedItems.filter((_, i) => i !== idx))} className="text-red-500">x</button>
-              </div>
+              <button 
+                key={idx} 
+                onClick={() => setSelectedItems(selectedItems.filter((_, i) => i !== idx))} 
+                className="bg-[#0F1014] text-white p-2 rounded text-xs border border-gray-700 hover:border-red-500"
+              >
+                {item.market_name}
+              </button>
             ))}
           </div>
         </div>
 
+        <h3 className="text-gray-400 mb-4 text-sm">Доступные предметы:</h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {items.map(item => (
             <button 
               key={item.id} 
               onClick={() => setSelectedItems([...selectedItems, item])}
-              className="bg-[#1A1B23] text-gray-300 text-xs p-3 rounded hover:bg-gray-700 border border-gray-800 text-left"
+              className="bg-[#1A1B23] text-gray-300 text-xs p-3 rounded hover:bg-gray-800 border border-gray-800 text-left"
             >
-              <span className="block font-bold text-white mb-1">{item.market_name}</span>
+              <span className="block font-bold text-white mb-1 truncate">{item.market_name}</span>
               <span className="text-[#FF9408]">{Number(item.price)} ₽</span>
             </button>
           ))}
@@ -107,17 +106,17 @@ const SetBuilder = () => {
           <p className="text-3xl text-white font-bold">{totalPrice} ₽</p>
         </div>
         <div className="flex flex-col gap-3">
-          <button onClick={handleSave} className="bg-[#5EADFF] text-white py-2 rounded font-medium">Сохранить сборку</button>
-          <button onClick={handleExportCSV} className="bg-gray-700 text-white py-2 rounded font-medium">Экспорт в CSV</button>
+          <button onClick={handleSave} className="bg-[#5EADFF] text-white py-2 rounded font-medium hover:bg-blue-500">Сохранить сборку</button>
+          <button onClick={handleExportCSV} className="bg-gray-700 text-white py-2 rounded font-medium hover:bg-gray-600">Экспорт в CSV</button>
         </div>
 
         <div className="mt-8 pt-6 border-t border-gray-700">
           <h4 className="text-white font-bold mb-4">Мои сохраненные сборки</h4>
           <div className="flex flex-col gap-2">
             {collections.map(c => (
-              <div key={c.id} className="flex justify-between items-center bg-[#0F1014] p-2 rounded text-sm text-gray-300">
-                <span>{c.title}</span>
-                <button onClick={() => handleDelete(c.id)} className="text-red-400">удалить</button>
+              <div key={c.id} className="flex justify-between items-center bg-[#0F1014] p-3 rounded text-sm text-gray-300 border border-gray-800">
+                <span className="truncate pr-2">{c.title}</span>
+                <button onClick={() => handleDelete(c.id)} className="text-red-400 hover:text-red-300">удалить</button>
               </div>
             ))}
           </div>
@@ -125,6 +124,6 @@ const SetBuilder = () => {
       </aside>
     </div>
   );
-}
+};
 
 export default SetBuilder;

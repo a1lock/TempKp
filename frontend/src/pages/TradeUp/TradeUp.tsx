@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../api';
-import type { Item } from '../../types';
+import type { Item, ContractResult } from '../../types';
 
 const TradeUp = () => {
   const [items, setItems] = useState<Item[]>([]);
   const [slots, setSlots] = useState<(Item | null)[]>(Array(10).fill(null));
   const [targetId, setTargetId] = useState<number | ''>('');
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<ContractResult | null>(null);
 
   useEffect(() => {
     api.get('/items').then(res => setItems(res.data));
@@ -53,7 +53,7 @@ const TradeUp = () => {
                   const newSlots = [...slots];
                   newSlots[idx] = null;
                   setSlots(newSlots);
-                }} className="text-red-500 text-xs mt-2">убрать</button>
+                }} className="text-red-500 text-xs mt-2 hover:text-red-400">убрать</button>
               </>
             ) : (
               <span className="text-gray-500 text-2xl">+</span>
@@ -65,7 +65,7 @@ const TradeUp = () => {
       <div className="flex flex-col md:flex-row gap-4 mb-8 bg-[#1A1B23] p-4 rounded-xl border border-gray-800">
         <select 
           className="p-3 bg-[#0F1014] text-white border border-gray-700 rounded w-full md:w-80 outline-none"
-          value={targetId} onChange={(e) => setTargetId(e.target.value)}
+          value={targetId} onChange={(e) => setTargetId(e.target.value ? Number(e.target.value) : '')}
         >
           <option value="">Выберите результат крафта...</option>
           {items.map(i => <option key={i.id} value={i.id}>{i.market_name}</option>)}
@@ -102,6 +102,6 @@ const TradeUp = () => {
       </div>
     </div>
   );
-}
+};
 
 export default TradeUp;

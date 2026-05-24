@@ -22,3 +22,8 @@ export interface Collection {
   title: string;
   items?: Item[];
 }
+
+export interface ContractResult {
+  expected_profit: number;
+  result_float: number;
+}

@@ -10,7 +10,7 @@ import SetBuilder from './pages/SetBuilder';
 import TradeUp from './pages/TradeUp';
 import Admin from './pages/Admin';
 
-export default function App() {
+const App = () => {
   return (
     <AuthProvider>
       <BrowserRouter>
@@ -18,18 +18,15 @@ export default function App() {
           <Navbar />
           <div className="flex-1">
             <Routes>
-              {/* публичные роуты */}
               <Route path="/" element={<Landing />} />
               <Route path="/login" element={<Login />} />
               <Route path="/market" element={<Market />} />
               
-              {/* закрытые роуты для авторизованных */}
               <Route element={<ProtectedRoute />}>
                 <Route path="/builder" element={<SetBuilder />} />
                 <Route path="/tradeup" element={<TradeUp />} />
               </Route>
 
-              {/* скрытый роут только для роли admin */}
               <Route element={<ProtectedRoute adminOnly={true} />}>
                 <Route path="/admin" element={<Admin />} />
               </Route>
@@ -39,4 +36,6 @@ export default function App() {
       </BrowserRouter>
     </AuthProvider>
   );
-}
+};
+
+export default App;
