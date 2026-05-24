@@ -1,6 +1,5 @@
 import { createContext, useState, useEffect, ReactNode } from 'react';
 import { User } from '../types';
-import { api } from '../api';
 
 interface AuthContextType {
   user: User | null;
@@ -13,7 +12,7 @@ export const AuthContext = createContext<AuthContextType>({} as AuthContextType)
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
 
-  // проверяем токен при загрузке приложения
+  // восстанавливаем сессию после перезагрузки страницы
   useEffect(() => {
     const token = localStorage.getItem('token');
     const storedUser = localStorage.getItem('user');

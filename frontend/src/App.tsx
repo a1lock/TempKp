@@ -1,57 +1,40 @@
-import { BrowserRouter, Routes, Route, Link, useNavigate } from 'react-router-dom';
-import { useContext } from 'react';
-import { AuthProvider, AuthContext } from './context/AuthContext';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import Navbar from './components/Navbar';
+import ProtectedRoute from './components/ProtectedRoute';
+
+import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Market from './pages/Market';
+import SetBuilder from './pages/SetBuilder';
 import TradeUp from './pages/TradeUp';
-import './App.css';
-
-// навигационная панель
-const Navbar = () => {
-  const { user, logout } = useContext(AuthContext);
-  const navigate = useNavigate();
-
-  const handleLogout = () => {
-    logout();
-    navigate('/');
-  };
-
-  return (
-    <header className="bg-[#16171D] h-20 flex items-center px-8 justify-between">
-      <div className="text-white font-bold text-xl">
-        SteamS<span className="text-[#FF9408]">&</span>C
-      </div>
-      <nav className="flex gap-8 text-gray-300 font-medium">
-        <Link to="/market" className="hover:text-white transition">Маркет</Link>
-        {user && <Link to="/tradeup" className="hover:text-white transition">Контракты</Link>}
-      </nav>
-      <div>
-        {user ? (
-          <div className="flex items-center gap-4">
-            <span className="text-gray-400 text-sm">{user.email}</span>
-            <button onClick={handleLogout} className="text-red-400 hover:text-red-300 text-sm">Выйти</button>
-          </div>
-        ) : (
-          <Link to="/" className="bg-[#5EADFF] text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-500 transition">
-            Войти
-          </Link>
-        )}
-      </div>
-    </header>
-  );
-};
+import Admin from './pages/Admin';
 
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <div className="min-h-screen bg-[#0B0C10] font-sans">
+        <div className="min-h-screen bg-[#0B0C10] font-sans flex flex-col">
           <Navbar />
-          <Routes>
-            <Route path="/" element={<Login />} />
-            <Route path="/market" element={<Market />} />
-            <Route path="/tradeup" element={<TradeUp />} />
-          </Routes>
+          <div className="flex-1">
+            <Routes>
+              {/* публичные роуты */}
+              <Route path="/" element={<Landing />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/market" element={<Market />} />
+              
+              {/* закрытые роуты для авторизованных */}
+              <Route element={<ProtectedRoute />}>
+                <Route path="/builder" element={<SetBuilder />} />
+                <Route path="/tradeup" element={<TradeUp />} />
+              </Route>
+
+              {/* скрытый роут только для роли admin */}
+              <Route element={<ProtectedRoute adminOnly={true} />}>
+                <Route path="/admin" element={<Admin />} />
+              </Route>
+            </Routes>
+          </div>
         </div>
       </BrowserRouter>
     </AuthProvider>

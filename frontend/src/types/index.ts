@@ -1,3 +1,9 @@
+export interface User {
+  id: number;
+  email: string;
+  role: string;
+}
+
 export interface Item {
   id: number;
   market_name: string;
@@ -9,4 +15,10 @@ export interface Item {
   image_url: string;
   min_float: number;
   max_float: number;
+}
+
+export interface Collection {
+  id: number;
+  title: string;
+  items?: Item[];
 }
