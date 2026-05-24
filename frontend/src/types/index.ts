@@ -19,11 +19,24 @@ export interface Item {
 
 export interface Collection {
   id: number;
+  user_id: number;
   title: string;
   items?: Item[];
 }
 
-export interface ContractResult {
-  expected_profit: number;
+export interface ContractHistory {
+  id: number;
+  input_items_cost: string;
+  expected_profit: string;
   result_float: number;
+  created_at: string;
+  market_name?: string;
+  image_url?: string;
+}
+
+export interface PredictionResult {
+  item: Item;
+  probability: number;
+  result_float: number;
+  profit: number;
 }
