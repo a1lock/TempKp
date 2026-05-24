@@ -29,17 +29,37 @@ const getCollectionById = async (req, res) => {
     }
 };
 
-// создание новой сборки (транзакция через выделенного клиента)
+// создание новой сборки
 const createCollection = async (req, res) => {
     const { title, itemIds } = req.body;
     if (!title || !title.trim()) {
         return res.status(400).json({ error: 'название сборки не может быть пустым' });
     }
 
-    const client = await pool.connect(); // получаем выделенного клиента из пула
+    const client = await pool.connect(); // получаем клиента для транзакции
     try {
         await client.query('BEGIN');
 
+        // проверяем предметы на уникальность базовых названий (без учета износа)
+        if (itemIds && itemIds.length > 0) {
+            const itemsData = await client.query('SELECT market_name FROM items WHERE id = ANY($1::bigint[])', [itemIds]);
+            const baseNames = [];
+
+            for (let row of itemsData.rows) {
+                // отрезаем качество в скобках (например, "AK-47 | Slate")
+                const baseName = row.market_name.split(' (')[0];
+                
+                if (baseNames.includes(baseName)) {
+                    await client.query('ROLLBACK');
+                    return res.status(400).json({ 
+                        error: `в одной сборке не может быть нескольких вариантов одного предмета (обнаружен дубликат: ${baseName})` 
+                    });
+                }
+                baseNames.push(baseName);
+            }
+        }
+
+        // создание записи коллекции
         const newCol = await client.query(
             'INSERT INTO collections (user_id, title) VALUES ($1, $2) RETURNING id',
             [req.user.id, title]
@@ -62,11 +82,11 @@ const createCollection = async (req, res) => {
         await client.query('ROLLBACK');
         res.status(500).json({ error: 'ошибка при создании сборки' });
     } finally {
-        client.release(); // освобождаем клиента
+        client.release();
     }
 };
 
-// обновление существующей сборки (транзакция через выделенного клиента)
+// обновление существующей сборки
 const updateCollection = async (req, res) => {
     const { id } = req.params;
     const { title, itemIds } = req.body;
@@ -84,6 +104,24 @@ const updateCollection = async (req, res) => {
             if (result.rows.length === 0) {
                 await client.query('ROLLBACK');
                 return res.status(404).json({ error: 'сборка не найдена или нет прав' });
+            }
+        }
+
+        // проверяем предметы на уникальность базовых названий перед обновлением
+        if (itemIds && itemIds.length > 0) {
+            const itemsData = await client.query('SELECT market_name FROM items WHERE id = ANY($1::bigint[])', [itemIds]);
+            const baseNames = [];
+
+            for (let row of itemsData.rows) {
+                const baseName = row.market_name.split(' (')[0];
+                
+                if (baseNames.includes(baseName)) {
+                    await client.query('ROLLBACK');
+                    return res.status(400).json({ 
+                        error: `в одной сборке не может быть нескольких вариантов одного предмета (обнаружен дубликат: ${baseName})` 
+                    });
+                }
+                baseNames.push(baseName);
             }
         }
 
