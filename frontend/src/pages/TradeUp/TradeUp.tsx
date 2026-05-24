@@ -3,6 +3,18 @@ import { api } from '../../api';
 import type { Item, PredictionResult, ContractHistory } from '../../types';
 import { Search } from 'lucide-react';
 
+// список разрешенных предметов для тестирования
+const allowedWeapons = [
+  'USP-S | Ticket to Hell',
+  'M4A1-S | Night Terror',
+  'FAMAS | Rapid Eye Movement',
+  'MP7 | Abyssal Apparition',
+  'AK-47 | Slate',
+  'Glock-18 | Clear Polymer',
+  'Galil AR | Chromatic Aberration',
+  'MP9 | Food Chain'
+];
+
 const getBaseName = (fullName: string): string => {
   return fullName.split(' (')[0];
 };
@@ -23,7 +35,22 @@ const getExteriorFromFloat = (f: number): string => {
   return 'Battle-Scarred';
 };
 
-// функция интеллектуального подбора ближайшего качества
+// получение цвета верхней полоски на основе официальной редкости cs2
+const getRarityColor = (rarity: string): string => {
+  switch (rarity) {
+    case 'Запрещенное':
+      return '#8847ff'; // фиолетовый
+    case 'Засекреченное':
+      return '#d32ce6'; // розовый
+    case 'Тайное':
+      return '#eb4b4b'; // красный
+    case 'Экстраординарное':
+      return '#e4ae39'; // золотой
+    default:
+      return '#4b69ff'; // армейское (синий)
+  }
+};
+
 const getClosestAvailableItem = (templates: Item[], baseName: string, targetExterior: string): Item | undefined => {
   const sameBaseItems = templates.filter(t => getBaseName(t.market_name) === baseName);
   if (sameBaseItems.length === 0) return undefined;
@@ -52,10 +79,12 @@ const getClosestAvailableItem = (templates: Item[], baseName: string, targetExte
 const TradeUp = () => {
   const [items, setItems] = useState<Item[]>([]);
   const [slots, setSlots] = useState<(Item | null)[]>(Array(10).fill(null));
+  // состояние для хранения ручного износа каждого слота
+  const [slotFloats, setSlotFloats] = useState<number[]>(Array(10).fill(0));
   const [search, setSearch] = useState('');
   const [history, setHistory] = useState<ContractHistory[]>([]);
+  const [showResults, setShowResults] = useState(false);
   
-  // состояния для модального окна деталей
   const [activeHistory, setActiveHistory] = useState<ContractHistory | null>(null);
   const [historyInputs, setHistoryInputs] = useState<Item[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -80,55 +109,46 @@ const TradeUp = () => {
       const copy = [...slots];
       copy[emptyIdx] = item;
       setSlots(copy);
+
+      // устанавливаем средний износ по умолчанию для нового предмета в слоте
+      const avgFloat = (item.min_float + item.max_float) / 2;
+      const copyFloats = [...slotFloats];
+      copyFloats[emptyIdx] = Number(avgFloat.toFixed(4));
+      setSlotFloats(copyFloats);
+      
+      // скрываем прошлые результаты при изменении состава слотов
+      setShowResults(false);
     } else {
       alert('все 10 слотов уже заполнены');
     }
   };
 
+  const handleFloatChange = (idx: number, val: number) => {
+    const copyFloats = [...slotFloats];
+    copyFloats[idx] = val;
+    setSlotFloats(copyFloats);
+    setShowResults(false);
+  };
+
   const clearSlots = () => {
     setSlots(Array(10).fill(null));
-  };
-
-  const handleCalculateAndSave = async () => {
-    if (filledCount !== 10) return alert('добавьте 10 предметов');
-    if (outcomes.length === 0) return alert('не удалось вычислить исходы');
-
-    // берем первый возможный результат для записи на сервере
-    const targetItemId = outcomes[0].item.id;
-    const inputIds = filledItems.map(s => s.id);
-
-    try {
-      await api.post('/contracts/calculate', { 
-        inputItemIds: inputIds, 
-        targetItemId 
-      });
-      alert('расчет завершен и сохранен в историю');
-      clearSlots();
-      fetchHistory();
-    } catch (e) {
-      alert('ошибка при сохранении расчета');
-    }
-  };
-
-  const handleHistoryClick = async (con: ContractHistory) => {
-    try {
-      // получаем входящие предметы из бэкенда для детализации
-      const res = await api.get(`/contracts/${con.id}/inputs`);
-      setHistoryInputs(res.data || []);
-      setActiveHistory(con);
-      setIsModalOpen(true);
-    } catch (e) {
-      alert('ошибка при загрузке деталей контракта');
-    }
+    setSlotFloats(Array(10).fill(0));
+    setShowResults(false);
   };
 
   const filledItems = slots.filter((s): s is Item => s !== null);
   const filledCount = filledItems.length;
 
+  // динамический расчет исходов контракта
   const outcomes = (() => {
     if (filledCount !== 10) return [];
 
-    const averageInputFloat = filledItems.reduce((sum, i) => sum + ((i.min_float + i.max_float) / 2), 0) / 10;
+    // считаем средний износ на основе введенных пользователем ручных float
+    const averageInputFloat = slots.reduce((sum, item, idx) => {
+      if (!item) return sum;
+      return sum + slotFloats[idx];
+    }, 0) / 10;
+
     const inputCost = filledItems.reduce((sum, i) => sum + Number(i.price), 0);
 
     const collectionCounts: Record<string, number> = {};
@@ -156,7 +176,6 @@ const TradeUp = () => {
         const resultFloat = averageInputFloat * (template.max_float - template.min_float) + template.min_float;
         const targetExterior = getExteriorFromFloat(resultFloat);
 
-        // интеллектуальный подбор износа
         const exactTargetItem = getClosestAvailableItem(targetTemplates, baseName, targetExterior);
 
         if (exactTargetItem) {
@@ -177,10 +196,66 @@ const TradeUp = () => {
     return possibleOutcomes;
   })();
 
-  const filteredCatalogItems = items.filter(item => 
-    item.market_name.toLowerCase().includes(search.toLowerCase()) && 
-    (item.rarity === 'Запрещенное' || item.rarity === 'Засекреченное')
-  );
+  const handleCalculateAndSave = async () => {
+    if (filledCount !== 10) return alert('добавьте 10 предметов');
+    if (outcomes.length === 0) return alert('не удалось вычислить исходы');
+
+    const targetItemId = outcomes[0].item.id;
+    const inputIds = filledItems.map(s => s.id);
+    const activeFloats = slotFloats.filter((_, idx) => slots[idx] !== null);
+
+    // формируем универсальный payload для защиты от ошибок 400 на бэкенде
+    const payload = {
+      inputItemIds: inputIds,
+      itemIds: inputIds,
+      floats: activeFloats,
+      inputItemFloats: activeFloats,
+      targetItemId: targetItemId,
+      targetId: targetItemId,
+      resultItemId: targetItemId,
+      items: filledItems.map((item, idx) => ({
+        id: item.id,
+        float: slotFloats[slots.indexOf(item)]
+      }))
+    };
+
+    try {
+      await api.post('/contracts/calculate', payload);
+      alert('расчет успешно сохранен в историю');
+      setShowResults(true);
+      fetchHistory();
+    } catch (e) {
+      alert('ошибка при сохранении расчета');
+    }
+  };
+
+  const handleHistoryClick = async (con: ContractHistory) => {
+    try {
+      const res = await api.get(`/contracts/${con.id}/inputs`);
+      setHistoryInputs(res.data || []);
+      setActiveHistory(con);
+      setIsModalOpen(true);
+    } catch (e) {
+      alert('ошибка при загрузке деталей контракта');
+    }
+  };
+
+  // находим первый непустой предмет для определения редкости
+  const firstSelectedItem = slots.find(s => s !== null);
+
+  const filteredCatalogItems = items.filter(item => {
+    const matchesSearch = item.market_name.toLowerCase().includes(search.toLowerCase());
+    
+    // фильтр по разрешенным предметам
+    const isAllowed = allowedWeapons.some(allowed => item.market_name.includes(allowed));
+    
+    // если есть первый предмет, показываем только предметы той же редкости
+    if (firstSelectedItem) {
+      return matchesSearch && isAllowed && item.rarity === firstSelectedItem.rarity;
+    }
+
+    return matchesSearch && isAllowed;
+  });
 
   return (
     <div className="max-w-[1440px] mx-auto p-6 flex flex-col min-h-screen justify-between relative">
@@ -188,19 +263,36 @@ const TradeUp = () => {
         <div className="text-gray-500 text-xs mb-4">Главная / Калькулятор контрактов</div>
         <h2 className="text-white text-2xl font-bold mb-6">Калькулятор контрактов (Trade-up)</h2>
 
+        {/* сетка слотов */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
           {slots.map((slot, idx) => (
-            <div key={idx} className="h-32 bg-[#1A1B23] border border-dashed border-gray-700 rounded-xl flex flex-col items-center justify-center p-2 text-center relative">
+            <div key={idx} className="h-36 bg-[#1A1B23] border border-dashed border-gray-700 rounded-xl flex flex-col items-center justify-center p-2 text-center relative overflow-hidden">
               {slot ? (
                 <>
-                  <span className="text-white text-xs line-clamp-2">{slot.market_name}</span>
+                  {/* полоса редкости сверху карточки */}
+                  <div className="absolute top-0 left-0 w-full h-1" style={{ backgroundColor: getRarityColor(slot.rarity) }} />
+                  <span className="text-white text-xs line-clamp-1 mt-2">{slot.market_name}</span>
+                  
+                  {/* мини-поле ввода износа */}
+                  <input 
+                    type="number"
+                    step="0.0001"
+                    min={slot.min_float}
+                    max={slot.max_float}
+                    value={slotFloats[idx] || 0}
+                    onChange={e => handleFloatChange(idx, Number(e.target.value))}
+                    className="w-20 bg-[#0F1014] text-[#FF9408] text-[10px] text-center rounded border border-gray-800 mt-2 p-0.5 outline-none"
+                    title={`Допустимый износ: ${slot.min_float} - ${slot.max_float}`}
+                  />
+
                   <button 
                     onClick={() => {
                       const copy = [...slots];
                       copy[idx] = null;
                       setSlots(copy);
+                      setShowResults(false);
                     }} 
-                    className="text-red-500 text-xs mt-2"
+                    className="text-red-500 text-[10px] mt-1"
                   >
                     убрать
                   </button>
@@ -222,10 +314,25 @@ const TradeUp = () => {
           </span>
         </div>
 
-        {outcomes.length > 0 && (
+        {/* кнопки управления контрактом */}
+        <div className="flex gap-4 mb-8 bg-[#1A1B23] p-4 rounded-xl border border-gray-800">
+          <button 
+            onClick={handleCalculateAndSave} 
+            disabled={filledCount !== 10}
+            className={`px-8 py-3 rounded-lg font-bold text-sm transition ${filledCount === 10 ? 'bg-[#FF9408] text-white hover:bg-orange-600' : 'bg-gray-800 text-gray-500 cursor-not-allowed'}`}
+          >
+            Рассчитать контракт
+          </button>
+          <button onClick={clearSlots} className="bg-gray-800 text-white px-6 py-3 rounded-lg font-bold hover:bg-gray-700 transition text-sm">
+            Очистить ячейки
+          </button>
+        </div>
+
+        {/* результаты отображаются только после нажатия кнопки */}
+        {showResults && outcomes.length > 0 && (
           <section className="bg-[#1A1B23] p-6 rounded-xl border border-gray-800 text-white mb-8">
             <h3 className="text-xs text-gray-500 uppercase tracking-wider mb-6">Прогноз исходов контракта</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {outcomes.map((out, idx) => (
                 <div key={idx} className="bg-[#0F1014] p-4 rounded-xl border border-gray-800 flex items-center justify-between">
                   <div>
@@ -242,21 +349,18 @@ const TradeUp = () => {
                 </div>
               ))}
             </div>
-            <div className="flex gap-4">
-              <button onClick={handleCalculateAndSave} className="bg-[#FF9408] text-white px-8 py-3 rounded-lg font-bold hover:bg-orange-600 transition text-sm">
-                Запустить и сохранить контракт
-              </button>
-              <button onClick={clearSlots} className="bg-gray-800 text-white px-6 py-3 rounded-lg font-bold hover:bg-gray-700 transition text-sm">
-                Очистить ячейки
-              </button>
-            </div>
           </section>
         )}
 
-        {/* выбор предметов */}
+        {/* каталог доступных предметов */}
         <section className="mt-8 bg-[#1A1B23] p-6 rounded-xl border border-gray-800 mb-8">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-            <h3 className="text-white font-bold">Выберите 10 предметов для контракта</h3>
+            <div className="flex flex-col gap-1">
+              <h3 className="text-white font-bold">Доступные предметы для контракта</h3>
+              {firstSelectedItem && (
+                <span className="text-[#FF9408] text-xs">Показаны предметы редкости: {firstSelectedItem.rarity}</span>
+              )}
+            </div>
             <div className="relative w-full md:w-80">
               <input 
                 type="text" 
@@ -282,7 +386,7 @@ const TradeUp = () => {
           </div>
         </section>
 
-        {/* история расчетов по вайрфреймам */}
+        {/* история расчетов */}
         <section className="bg-[#1A1B23] p-6 rounded-xl border border-gray-800">
           <h3 className="text-white font-bold text-lg mb-6">История проведенных расчетов</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
