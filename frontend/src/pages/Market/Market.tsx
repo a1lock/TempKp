@@ -11,6 +11,7 @@ const Market = () => {
   const [maxPrice, setMaxPrice] = useState<number>(300000);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [selectedExteriors, setSelectedExteriors] = useState<string[]>([]);
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
   useEffect(() => {
     api
@@ -38,6 +39,7 @@ const Market = () => {
     setMaxPrice(300000);
     setSelectedTypes([]);
     setSelectedExteriors([]);
+    setSortOrder("asc");
   };
 
   const filteredItems = items.filter((item) => {
@@ -62,7 +64,11 @@ const Market = () => {
       matchesType &&
       matchesExterior
     );
-  });
+  }).sort((a, b) =>
+    sortOrder === "asc"
+      ? Number(a.price) - Number(b.price)
+      : Number(b.price) - Number(a.price)
+  );
 
   return (
     <div className="max-w-[1440px] mx-auto p-6 flex flex-col min-h-screen justify-between">
@@ -89,8 +95,13 @@ const Market = () => {
               size={18}
             />
           </div>
-          <select className="bg-[#1A1B23] text-white p-3 rounded-lg border border-gray-800 outline-none">
-            <option>Сортировка: цена</option>
+          <select
+            className="bg-[#1A1B23] text-white p-3 rounded-lg border border-gray-800 outline-none"
+            value={sortOrder}
+            onChange={(e) => setSortOrder(e.target.value as "asc" | "desc")}
+          >
+            <option value="asc">Цена: по возрастанию</option>
+            <option value="desc">Цена: по убыванию</option>
           </select>
         </div>
 
