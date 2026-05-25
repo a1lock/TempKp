@@ -132,12 +132,21 @@ const SetBuilder = () => {
         ).toFixed(3)
       : "0.000";
 
-  const filteredModalItems = items.filter(
-    (item) =>
+  const filteredModalItems = items.filter((item) => {
+    // отсекаем качество в скобках, оставляя только модель: "AK-47 | Slate"
+    const itemBaseName = item.market_name.split(" (")[0];
+
+    // проверяем, добавлена ли уже какая-то версия этой модели в наш набор
+    const isModelAlreadySelected = selectedItems.some(
+      (selected) => selected.market_name.split(" (")[0] === itemBaseName,
+    );
+
+    return (
       item.weapon_type === activeCategory &&
       item.market_name.toLowerCase().includes(modalSearch.toLowerCase()) &&
-      !selectedItems.some((selected) => selected.id === item.id),
-  );
+      !isModelAlreadySelected
+    );
+  });
 
   return (
     <div className="max-w-[1440px] mx-auto p-6 flex flex-col min-h-screen justify-between relative">
