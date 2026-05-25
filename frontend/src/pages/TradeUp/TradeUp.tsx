@@ -58,6 +58,14 @@ const TradeUp = () => {
     fetchHistory();
   }, []);
 
+  const exteriorMidFloat: Record<string, number> = {
+    "Factory New": 0.035,
+    "Minimal Wear": 0.110,
+    "Field-Tested": 0.265,
+    "Well-Worn": 0.415,
+    "Battle-Scarred": 0.725,
+  };
+
   const handleAddItem = (item: Item) => {
     const emptyIndex = slots.findIndex((s) => s === null);
     if (emptyIndex !== -1) {
@@ -65,10 +73,8 @@ const TradeUp = () => {
       newSlots[emptyIndex] = item;
       setSlots(newSlots);
 
-      // задаем начальный износ на основе параметров предмета
       const newFloats = [...slotFloats];
-      newFloats[emptyIndex] =
-        item.min_float !== undefined ? item.min_float : 0.15;
+      newFloats[emptyIndex] = exteriorMidFloat[item.exterior] ?? 0.15;
       setSlotFloats(newFloats);
     }
   };
