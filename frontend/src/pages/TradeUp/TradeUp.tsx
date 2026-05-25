@@ -310,7 +310,7 @@ const TradeUp = () => {
         </span>
       </div>
 
-      <div className="flex gap-4 mb-8">
+      <div className="flex flex-wrap gap-4 mb-8">
         <button
           onClick={handleCalculate}
           className="bg-[#FF9408] text-white px-6 py-3 rounded-lg font-bold text-sm hover:bg-orange-600 transition"

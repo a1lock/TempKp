@@ -23,8 +23,8 @@ const Login = () => {
   };
 
   return (
-    <div className="flex h-[80vh] items-center justify-center">
-      <form onSubmit={handleAuth} className="bg-[#1A1B23] p-8 rounded-xl flex flex-col gap-4 w-96 border border-gray-800">
+    <div className="flex h-[80vh] items-center justify-center px-4">
+      <form onSubmit={handleAuth} className="bg-[#1A1B23] p-8 rounded-xl flex flex-col gap-4 w-full max-w-sm border border-gray-800">
         <h2 className="text-white text-2xl font-bold mb-4 text-center">
           {isRegister ? 'Регистрация' : 'Вход в систему'}
         </h2>
