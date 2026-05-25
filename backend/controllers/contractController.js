@@ -65,7 +65,32 @@ const calculateContract = async (req, res) => {
       return res.status(400).json({ error: 'Нет возможных исходов для данного контракта' });
     }
 
-    const outcomes = possibleOutputs.map(output => {
+    const getCollectionName = (marketName) => {
+      if (/Ticket to Hell|Night Terror|Rapid Eye Movement|Abyssal Apparition|Starlight Protector/.test(marketName)) {
+        return 'Dreams & Nightmares';
+      }
+      if (/\bSlate\b|Clear Polymer|Galil AR \| Chromatic Aberration|MP9 \| Food Chain|M4A4 \| In Living Color|USP-S \| The Traitor/.test(marketName)) {
+        return 'Snakebite';
+      }
+      return null;
+    };
+
+    const getExteriorByFloat = (f) => {
+      if (f < 0.15) return 'Factory New';
+      if (f < 0.45) return 'Field-Tested';
+      return 'Battle-Scarred';
+    };
+
+    const inputCollection = getCollectionName(firstItem.market_name);
+    const expectedExterior = getExteriorByFloat(averageFloat);
+
+    let filteredOutputs = possibleOutputs.filter((o) =>
+      o.exterior === expectedExterior &&
+      (inputCollection === null || getCollectionName(o.market_name) === inputCollection)
+    );
+    if (filteredOutputs.length === 0) filteredOutputs = possibleOutputs;
+
+    const outcomes = filteredOutputs.map(output => {
       const minF = Number(output.min_float);
       const maxF = Number(output.max_float);
       const resultFloat = averageFloat * (maxF - minF) + minF;

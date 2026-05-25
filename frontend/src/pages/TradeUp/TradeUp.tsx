@@ -32,7 +32,7 @@ const TradeUp = () => {
     success_chance: number;
     result_float: number;
     exterior_name: string;
-    outcomes?: { market_name: string; chance: number; profit: number }[];
+    outcomes?: { market_name: string; price: number; chance: number; profit: number }[];
   } | null>(null);
   const [search, setSearch] = useState("");
 
@@ -46,13 +46,7 @@ const TradeUp = () => {
   useEffect(() => {
     api
       .get("/items")
-      .then((res) => {
-        const filtered = res.data.filter(
-          (item: Item) =>
-            item.rarity === "Запрещенное" || item.rarity === "Засекреченное",
-        );
-        setItems(filtered);
-      })
+      .then((res) => setItems(res.data))
       .catch((err) => console.error("ошибка загрузки каталога:", err));
 
     fetchHistory();
@@ -155,13 +149,17 @@ const TradeUp = () => {
           .map((s) => {
             if (
               s.market_name.includes("Ticket to Hell") ||
-              s.market_name.includes("Night Terror")
+              s.market_name.includes("Night Terror") ||
+              s.market_name.includes("Rapid Eye Movement") ||
+              s.market_name.includes("Abyssal Apparition")
             ) {
               return "Dreams & Nightmares";
             }
             if (
               s.market_name.includes("Slate") ||
-              s.market_name.includes("Clear Polymer")
+              s.market_name.includes("Clear Polymer") ||
+              s.market_name.includes("Chromatic Aberration") ||
+              s.market_name.includes("Food Chain")
             ) {
               return "Snakebite";
             }
@@ -196,15 +194,16 @@ const TradeUp = () => {
         collections.some((c) => {
           if (c === "Dreams & Nightmares")
             return (
-              i.market_name.includes("Rapid Eye") ||
-              i.market_name.includes("Abyssal") ||
-              i.market_name.includes("Starlight")
+              i.market_name.includes("FAMAS | Rapid Eye Movement") ||
+              i.market_name.includes("MP7 | Abyssal Apparition") ||
+              i.market_name.includes("MP9 | Starlight Protector")
             );
           if (c === "Snakebite")
             return (
-              i.market_name.includes("Living Color") ||
-              i.market_name.includes("Traitor") ||
-              i.market_name.includes("Food Chain")
+              i.market_name.includes("Galil AR | Chromatic Aberration") ||
+              i.market_name.includes("MP9 | Food Chain") ||
+              i.market_name.includes("M4A4 | In Living Color") ||
+              i.market_name.includes("USP-S | The Traitor")
             );
           return false;
         }),
@@ -216,18 +215,26 @@ const TradeUp = () => {
     );
     const chance = Math.round(100 / possibleTargets.length);
 
-    return possibleTargets.map((t) => {
-      const profit = Math.round(Number(t.price) - totalInputCost);
-      return {
-        market_name: t.market_name,
-        chance: chance,
-        profit: profit,
-      };
-    });
+    return possibleTargets.map((t) => ({
+      market_name: t.market_name,
+      price: Math.round(Number(t.price)),
+      profit: Math.round(Number(t.price) - totalInputCost),
+      chance: chance,
+    }));
   };
 
-  const filteredItems = items.filter((item) =>
-    item.market_name.toLowerCase().includes(search.toLowerCase()),
+  const CONTRACT_INPUT_KEYWORDS = [
+    "Ticket to Hell", "Night Terror",
+    "Rapid Eye Movement", "Abyssal Apparition",
+    "Slate", "Clear Polymer",
+    "Chromatic Aberration", "Food Chain",
+  ];
+
+  const filteredItems = items.filter(
+    (item) =>
+      (item.rarity === "Запрещенное" || item.rarity === "Засекреченное") &&
+      CONTRACT_INPUT_KEYWORDS.some((k) => item.market_name.includes(k)) &&
+      item.market_name.toLowerCase().includes(search.toLowerCase()),
   );
 
   const displayedOutcomes = getPossibleOutcomes();
@@ -383,8 +390,13 @@ const TradeUp = () => {
                     <span className="text-[10px] text-[#FF9408]">
                       Шанс: {outcome.chance}%
                     </span>
+                    <span className="text-xs font-bold text-white">
+                      {outcome.price} ₽
+                    </span>
+                  </div>
+                  <div className="flex justify-end mt-1">
                     <span
-                      className={`text-xs font-bold ${outcome.profit >= 0 ? "text-green-500" : "text-red-500"}`}
+                      className={`text-[10px] ${outcome.profit >= 0 ? "text-green-500" : "text-red-500"}`}
                     >
                       {outcome.profit >= 0 ? "+" : ""}
                       {outcome.profit} ₽
