@@ -11,12 +11,19 @@ interface HistoryItem {
   created_at: string;
 }
 
+interface ModalContract {
+  input_items_cost: number;
+  expected_profit: number;
+  result_float: number;
+  items: Array<{ market_name: string; exterior: string; quantity: number }>;
+}
+
 const TradeUp = () => {
   const [items, setItems] = useState<Item[]>([]);
   const [slots, setSlots] = useState<(Item | null)[]>(Array(10).fill(null));
-  // хранение индивидуального износа для каждой из 10 ячеек
   const [slotFloats, setSlotFloats] = useState<number[]>(Array(10).fill(0.15));
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [modalContract, setModalContract] = useState<ModalContract | null>(null);
   const [result, setResult] = useState<{
     input_items_cost: number;
     expected_profit: number;
@@ -29,8 +36,14 @@ const TradeUp = () => {
   } | null>(null);
   const [search, setSearch] = useState("");
 
+  const fetchHistory = () => {
+    api
+      .get("/contracts/history")
+      .then((res) => setHistory(res.data))
+      .catch((err) => console.error("ошибка загрузки истории:", err));
+  };
+
   useEffect(() => {
-    // загружаем предметы каталога
     api
       .get("/items")
       .then((res) => {
@@ -42,16 +55,8 @@ const TradeUp = () => {
       })
       .catch((err) => console.error("ошибка загрузки каталога:", err));
 
-    // загружаем историю расчетов пользователя
     fetchHistory();
   }, []);
-
-  const fetchHistory = () => {
-    api
-      .get("/contracts/history")
-      .then((res) => setHistory(res.data))
-      .catch((err) => console.error("ошибка загрузки истории:", err));
-  };
 
   const handleAddItem = (item: Item) => {
     const emptyIndex = slots.findIndex((s) => s === null);
@@ -110,41 +115,18 @@ const TradeUp = () => {
     }
   };
 
-  // загрузка деталей контракта из истории при клике с распаковкой дубликатов
   const handleLoadDetails = async (id: number) => {
     try {
       const res = await api.get(`/contracts/${id}`);
-      const newSlots = Array(10).fill(null);
-      const newFloats = Array(10).fill(0.15);
-      let slotIndex = 0;
-
-      // распаковываем предметы по ячейкам на основе их количества в контракте
-      res.data.items.forEach((item: any) => {
-        const qty = item.quantity || 1;
-        for (let i = 0; i < qty; i++) {
-          if (slotIndex < 10) {
-            newSlots[slotIndex] = item;
-            newFloats[slotIndex] =
-              item.float_value !== undefined
-                ? item.float_value
-                : item.min_float || 0.15;
-            slotIndex++;
-          }
-        }
-      });
-
-      setSlots(newSlots);
-      setSlotFloats(newFloats);
-
-      // выводим результаты для выбранного из истории контракта
-      setResult({
+      setModalContract({
         input_items_cost: Number(res.data.input_items_cost),
         expected_profit: Number(res.data.expected_profit),
-        min_profit: 0,
-        max_profit: 0,
-        success_chance: 100,
-        result_float: res.data.result_float,
-        exterior_name: "по истории",
+        result_float: Number(res.data.result_float),
+        items: res.data.items.map((item: { market_name: string; exterior: string; quantity?: number }) => ({
+          market_name: item.market_name,
+          exterior: item.exterior,
+          quantity: item.quantity || 1,
+        })),
       });
     } catch (err) {
       alert("ошибка при загрузке деталей контракта");
@@ -435,6 +417,72 @@ const TradeUp = () => {
           ))}
         </div>
       </div>
+
+      {/* модальное окно деталей контракта из истории */}
+      {modalContract && (
+        <div
+          className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
+          onClick={() => setModalContract(null)}
+        >
+          <div
+            className="bg-[#1A1B23] border border-gray-800 rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-sm font-bold text-white">Детали контракта</h3>
+              <button
+                onClick={() => setModalContract(null)}
+                className="text-gray-500 hover:text-white text-lg leading-none"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="bg-[#0F1014] rounded-lg p-4 mb-6">
+              <h4 className="text-xs font-bold text-[#FF9408] mb-4">Прогноз контракта</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <span className="text-xs text-gray-400 block mb-1">Ожидаемая прибыль</span>
+                  <span className={`text-lg font-extrabold ${modalContract.expected_profit >= 0 ? "text-green-500" : "text-red-500"}`}>
+                    {modalContract.expected_profit >= 0 ? "+" : ""}
+                    {modalContract.expected_profit} ₽
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-400 block mb-1">Прогноз Float</span>
+                  <span className="text-lg font-extrabold">
+                    {modalContract.result_float.toFixed(3)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-400 block mb-1">Сумма входа</span>
+                  <span className="text-lg font-extrabold text-white">
+                    {modalContract.input_items_cost} ₽
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-xs text-gray-400 uppercase font-bold mb-3">Предметы контракта</h4>
+              <div className="flex flex-col gap-2">
+                {modalContract.items.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="bg-[#0F1014] border border-gray-800 rounded-lg px-4 py-3 flex justify-between items-center"
+                  >
+                    <span className="text-xs font-bold text-white truncate min-w-0 flex-1">{item.market_name}</span>
+                    <div className="flex items-center gap-3 shrink-0 ml-3">
+                      <span className="text-xs text-gray-400">{item.exterior}</span>
+                      <span className="text-xs font-bold text-[#FF9408]">× {item.quantity}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* история проведенных расчетов */}
       <div className="bg-[#1A1B23] border border-gray-800 rounded-xl p-6">
