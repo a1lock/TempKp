@@ -104,7 +104,17 @@ const updateCollection = async (req, res) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        
+
+        // всегда проверяем владельца до любых изменений
+        const owned = await client.query(
+            'SELECT id FROM collections WHERE id = $1 AND user_id = $2',
+            [id, req.user.id]
+        );
+        if (owned.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'сборка не найдена или нет прав' });
+        }
+
         if (title) {
             if (!title.trim()) {
                 await client.query('ROLLBACK');
@@ -121,11 +131,7 @@ const updateCollection = async (req, res) => {
                 return res.status(409).json({ error: `набор с названием "${title}" уже существует` });
             }
 
-            const result = await client.query('UPDATE collections SET title = $1 WHERE id = $2 AND user_id = $3 RETURNING id', [title, id, req.user.id]);
-            if (result.rows.length === 0) {
-                await client.query('ROLLBACK');
-                return res.status(404).json({ error: 'сборка не найдена или нет прав' });
-            }
+            await client.query('UPDATE collections SET title = $1 WHERE id = $2', [title, id]);
         }
 
         // проверяем предметы на уникальность базовых названий перед обновлением
@@ -135,11 +141,11 @@ const updateCollection = async (req, res) => {
 
             for (let row of itemsData.rows) {
                 const baseName = row.market_name.split(' (')[0];
-                
+
                 if (baseNames.includes(baseName)) {
                     await client.query('ROLLBACK');
-                    return res.status(400).json({ 
-                        error: `в одной сборке не может быть нескольких вариантов одного предмета (обнаружен дубликат: ${baseName})` 
+                    return res.status(400).json({
+                        error: `в одной сборке не может быть нескольких вариантов одного предмета (обнаружен дубликат: ${baseName})`
                     });
                 }
                 baseNames.push(baseName);

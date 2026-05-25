@@ -25,7 +25,9 @@ const register = async (req, res) => {
             'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, role',
             [email, hash]
         );
-        res.status(201).json(newUser.rows[0]);
+        const { id, email: userEmail, role } = newUser.rows[0];
+        const token = jwt.sign({ id, role }, process.env.JWT_SECRET, { expiresIn: '24h' });
+        res.status(201).json({ token, user: { id, email: userEmail, role } });
     } catch (err) {
         // обработка уникального ключа бд (23505 - код ошибки дубликата в postgres)
         if (err.code === '23505') {

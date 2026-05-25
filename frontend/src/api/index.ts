@@ -13,4 +13,18 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// при протухшем токене — очищаем хранилище и редиректим на логин
+api.interceptors.response.use(
+  (res) => res,
+  (error) => {
+    const isAuthRoute = error.config?.url?.includes('/auth/');
+    if (error.response?.status === 401 && !isAuthRoute) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
 export { api };

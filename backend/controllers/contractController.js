@@ -49,6 +49,11 @@ const calculateContract = async (req, res) => {
     const averageFloat = sumFloats / 10;
 
     const firstItem = dbItemsMap[items[0].id];
+    const allSameRarity = items.every(i => dbItemsMap[i.id]?.rarity === firstItem.rarity);
+    if (!allSameRarity) {
+      return res.status(400).json({ error: 'Все предметы контракта должны иметь одинаковую редкость' });
+    }
+
     let targetRarity = '';
     if (firstItem.rarity === 'Запрещенное') targetRarity = 'Засекреченное';
     else if (firstItem.rarity === 'Засекреченное') targetRarity = 'Тайное';
@@ -164,57 +169,21 @@ const calculateContract = async (req, res) => {
   }
 };
 
-// получение истории контрактов с динамическим определением имени результата
+// получение истории контрактов пользователя
 const getContractHistory = async (req, res) => {
   try {
-    const { rows: contracts } = await db.query(
+    const { rows } = await db.query(
       'SELECT id, input_items_cost, expected_profit, result_float, created_at FROM contracts WHERE user_id = $1 ORDER BY created_at DESC',
       [req.user.id]
     );
-
-    const historyWithNames = [];
-
-    // динамически определяем возможный результат для отображения в истории
-    for (const contract of contracts) {
-      const { rows: inputs } = await db.query(
-        'SELECT i.rarity FROM contract_items ci JOIN items i ON ci.item_id = i.id WHERE ci.contract_id = $1 LIMIT 1',
-        [contract.id]
-      );
-
-      let resultName = 'Неизвестно';
-
-      if (inputs.length > 0) {
-        const inputRarity = inputs[0].rarity;
-        let targetRarity = '';
-        if (inputRarity === 'Запрещенное') targetRarity = 'Засекреченное';
-        else if (inputRarity === 'Засекреченное') targetRarity = 'Тайное';
-
-        if (targetRarity) {
-          const { rows: outputs } = await db.query(
-            'SELECT market_name FROM items WHERE rarity = $1 LIMIT 1',
-            [targetRarity]
-          );
-          if (outputs.length > 0) {
-            // убираем качество из скобок для красивого вывода
-            resultName = outputs[0].market_name.split(' (')[0]; 
-          }
-        }
-      }
-
-      historyWithNames.push({
-        ...contract,
-        result_name: resultName
-      });
-    }
-
-    res.json(historyWithNames);
+    res.json(rows);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Ошибка получения истории контрактов' });
   }
 };
 
-// получение детальной информации о конкретном контракте по id (новый эндпоинт)
+// получение детальной информации о конкретном контракте по id
 const getContractDetails = async (req, res) => {
   try {
     const { id } = req.params;

@@ -8,7 +8,7 @@ const Market = () => {
   const [search, setSearch] = useState("");
   const [colorFilter, setColorFilter] = useState("");
   const [minPrice, setMinPrice] = useState<number>(0);
-  const [maxPrice, setMaxPrice] = useState<number>(300000);
+  const [maxPrice, setMaxPrice] = useState<number>(Infinity);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [selectedExteriors, setSelectedExteriors] = useState<string[]>([]);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
@@ -36,7 +36,7 @@ const Market = () => {
     setSearch("");
     setColorFilter("");
     setMinPrice(0);
-    setMaxPrice(300000);
+    setMaxPrice(Infinity);
     setSelectedTypes([]);
     setSelectedExteriors([]);
     setSortOrder("asc");
@@ -125,8 +125,8 @@ const Market = () => {
                   type="number"
                   placeholder="до"
                   className="w-1/2 bg-[#0F1014] text-white p-2 rounded text-xs border border-gray-800"
-                  value={maxPrice || ""}
-                  onChange={(e) => setMaxPrice(Number(e.target.value))}
+                  value={isFinite(maxPrice) ? maxPrice : ""}
+                  onChange={(e) => setMaxPrice(e.target.value === "" ? Infinity : Number(e.target.value))}
                 />
               </div>
             </div>

@@ -4,8 +4,8 @@ const { getUserCollections, getCollectionById, createCollection, updateCollectio
 const { verifyToken } = require('../middleware/authMiddleware');
 
 router.get('/', verifyToken, getUserCollections);
-router.get('/:id', verifyToken, getCollectionById);
 router.get('/:id/export', verifyToken, exportCollectionToCSV);
+router.get('/:id', verifyToken, getCollectionById);
 router.post('/', verifyToken, createCollection);
 router.put('/:id', verifyToken, updateCollection);
 router.delete('/:id', verifyToken, deleteCollection);

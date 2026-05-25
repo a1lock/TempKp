@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { api } from "../../api";
 import type { Item } from "../../types";
 
@@ -7,9 +7,23 @@ interface HistoryItem {
   input_items_cost: string;
   expected_profit: string;
   result_float: number;
-  result_name: string;
   created_at: string;
 }
+
+const EXTERIOR_MID_FLOAT: Record<string, number> = {
+  "Factory New": 0.035,
+  "Minimal Wear": 0.110,
+  "Field-Tested": 0.265,
+  "Well-Worn": 0.415,
+  "Battle-Scarred": 0.725,
+};
+
+const CONTRACT_INPUT_KEYWORDS = [
+  "Ticket to Hell", "Night Terror",
+  "Rapid Eye Movement", "Abyssal Apparition",
+  "Slate", "Clear Polymer",
+  "Chromatic Aberration", "Food Chain",
+];
 
 interface ModalContract {
   input_items_cost: number;
@@ -52,14 +66,6 @@ const TradeUp = () => {
     fetchHistory();
   }, []);
 
-  const exteriorMidFloat: Record<string, number> = {
-    "Factory New": 0.035,
-    "Minimal Wear": 0.110,
-    "Field-Tested": 0.265,
-    "Well-Worn": 0.415,
-    "Battle-Scarred": 0.725,
-  };
-
   const handleAddItem = (item: Item) => {
     const emptyIndex = slots.findIndex((s) => s === null);
     if (emptyIndex !== -1) {
@@ -68,7 +74,7 @@ const TradeUp = () => {
       setSlots(newSlots);
 
       const newFloats = [...slotFloats];
-      newFloats[emptyIndex] = exteriorMidFloat[item.exterior] ?? 0.15;
+      newFloats[emptyIndex] = EXTERIOR_MID_FLOAT[item.exterior] ?? 0.15;
       setSlotFloats(newFloats);
     }
   };
@@ -213,22 +219,15 @@ const TradeUp = () => {
       (sum, i) => sum + Number(i.price),
       0,
     );
-    const chance = Math.round(100 / possibleTargets.length);
+    const exactChance = 100 / possibleTargets.length;
 
     return possibleTargets.map((t) => ({
       market_name: t.market_name,
       price: Math.round(Number(t.price)),
       profit: Math.round(Number(t.price) - totalInputCost),
-      chance: chance,
+      chance: exactChance,
     }));
   };
-
-  const CONTRACT_INPUT_KEYWORDS = [
-    "Ticket to Hell", "Night Terror",
-    "Rapid Eye Movement", "Abyssal Apparition",
-    "Slate", "Clear Polymer",
-    "Chromatic Aberration", "Food Chain",
-  ];
 
   const filteredItems = items.filter(
     (item) =>
@@ -388,7 +387,7 @@ const TradeUp = () => {
                   </span>
                   <div className="flex justify-between items-center mt-3">
                     <span className="text-[10px] text-[#FF9408]">
-                      Шанс: {outcome.chance}%
+                      Шанс: {Math.round(outcome.chance)}%
                     </span>
                     <span className="text-xs font-bold text-white">
                       {outcome.price} ₽

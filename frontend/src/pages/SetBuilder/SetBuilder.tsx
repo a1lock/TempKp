@@ -109,6 +109,10 @@ const SetBuilder = () => {
   };
 
   const selectItemFromModal = (item: Item) => {
+    if (selectedItems.length >= 12) {
+      alert("максимум 12 предметов в наборе");
+      return;
+    }
     setSelectedItems((prev) => [...prev, item]);
     setIsModalOpen(false);
   };
