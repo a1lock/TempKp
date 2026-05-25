@@ -51,8 +51,9 @@ const SetBuilder = () => {
       setTitle("Новая сборка");
       setSelectedItems([]);
       fetchCollections();
-    } catch (e) {
-      alert("ошибка при сохранении");
+    } catch (e: any) {
+      const msg = e?.response?.data?.error || "ошибка при сохранении";
+      alert(msg);
     }
   };
 

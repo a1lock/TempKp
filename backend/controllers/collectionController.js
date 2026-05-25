@@ -59,6 +59,16 @@ const createCollection = async (req, res) => {
             }
         }
 
+        // проверка уникальности названия среди наборов этого пользователя
+        const duplicate = await client.query(
+            'SELECT id FROM collections WHERE user_id = $1 AND LOWER(title) = LOWER($2)',
+            [req.user.id, title.trim()]
+        );
+        if (duplicate.rows.length > 0) {
+            await client.query('ROLLBACK');
+            return res.status(409).json({ error: `набор с названием "${title}" уже существует` });
+        }
+
         // создание записи коллекции
         const newCol = await client.query(
             'INSERT INTO collections (user_id, title) VALUES ($1, $2) RETURNING id',
@@ -100,6 +110,17 @@ const updateCollection = async (req, res) => {
                 await client.query('ROLLBACK');
                 return res.status(400).json({ error: 'название сборки не может быть пустым' });
             }
+
+            // проверяем что название не занято другим набором этого пользователя
+            const duplicate = await client.query(
+                'SELECT id FROM collections WHERE user_id = $1 AND LOWER(title) = LOWER($2) AND id != $3',
+                [req.user.id, title.trim(), id]
+            );
+            if (duplicate.rows.length > 0) {
+                await client.query('ROLLBACK');
+                return res.status(409).json({ error: `набор с названием "${title}" уже существует` });
+            }
+
             const result = await client.query('UPDATE collections SET title = $1 WHERE id = $2 AND user_id = $3 RETURNING id', [title, id, req.user.id]);
             if (result.rows.length === 0) {
                 await client.query('ROLLBACK');
