@@ -134,7 +134,7 @@ const TradeUp = () => {
           quantity: item.quantity || 1,
         })),
       });
-    } catch (err) {
+    } catch {
       alert("ошибка при загрузке деталей контракта");
     }
   };
@@ -226,10 +226,17 @@ const TradeUp = () => {
     });
   };
 
-  // фильтрация доступных предметов по названию
   const filteredItems = items.filter((item) =>
     item.market_name.toLowerCase().includes(search.toLowerCase()),
   );
+
+  const displayedOutcomes = getPossibleOutcomes();
+  const expectedProfit = displayedOutcomes.length > 0
+    ? Math.round(displayedOutcomes.reduce((sum, o) => sum + (o.chance / 100) * o.profit, 0))
+    : result?.expected_profit ?? 0;
+  const successChance = displayedOutcomes.length > 0
+    ? Math.round((displayedOutcomes.filter(o => o.profit > 0).length / displayedOutcomes.length) * 100)
+    : result?.success_chance ?? 0;
 
   return (
     <div className="max-w-[1440px] mx-auto p-6 text-white bg-[#0B0C10] min-h-[90vh]">
@@ -323,7 +330,7 @@ const TradeUp = () => {
                 Шанс исхода
               </span>
               <span className="text-2xl font-extrabold">
-                {result.success_chance}%
+                {successChance}%
               </span>
             </div>
             <div>
@@ -331,10 +338,10 @@ const TradeUp = () => {
                 Ожидаемая прибыль
               </span>
               <span
-                className={`text-2xl font-extrabold ${result.expected_profit >= 0 ? "text-green-500" : "text-red-500"}`}
+                className={`text-2xl font-extrabold ${expectedProfit >= 0 ? "text-green-500" : "text-red-500"}`}
               >
-                {result.expected_profit >= 0 ? "+" : ""}
-                {result.expected_profit} ₽
+                {expectedProfit >= 0 ? "+" : ""}
+                {expectedProfit} ₽
               </span>
             </div>
             <div>
@@ -364,7 +371,7 @@ const TradeUp = () => {
               Возможные исходы контракта:
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {getPossibleOutcomes().map((outcome: any, idx: number) => (
+              {displayedOutcomes.map((outcome, idx: number) => (
                 <div
                   key={idx}
                   className="bg-[#0F1014] p-4 rounded-lg border border-gray-800 flex flex-col justify-between"
