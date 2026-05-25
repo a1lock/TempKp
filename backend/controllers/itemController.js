@@ -50,30 +50,73 @@ const uploadPrices = (req, res) => {
     const results = [];
     fs.createReadStream(req.file.path)
         .pipe(csv())
+        .on('headers', (headers) => {
+            // проверяем наличие обязательных колонок (без учёта регистра)
+            const normalized = headers.map(h => h.toLowerCase().trim());
+            const hasId = normalized.includes('id');
+            const hasPrice = normalized.includes('price');
+            if (!hasId || !hasPrice) {
+                // записываем флаг ошибки — поток уже открыт, прервать нельзя
+                results._invalidHeaders = true;
+            }
+        })
         .on('data', (data) => results.push(data))
         .on('end', async () => {
-            try {
-                for (let row of results) {
-                    // нормализация заголовков csv (поддержка разного регистра)
-                    const itemId = row.id || row.Id || row.ID;
-                    const itemPrice = row.price || row.Price || row.PRICE;
+            if (results._invalidHeaders) {
+                if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+                return res.status(400).json({ error: 'CSV должен содержать колонки "id" и "price"' });
+            }
 
-                    if (itemId && itemPrice) {
-                        const parsedPrice = parseFloat(itemPrice);
-                        // валидация цены перед сохранением
-                        if (!isNaN(parsedPrice) && parsedPrice >= 0) {
-                            await pool.query('UPDATE items SET price = $1 WHERE id = $2', [parsedPrice, itemId]);
-                        }
+            if (results.length === 0) {
+                if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+                return res.status(400).json({ error: 'файл не содержит данных' });
+            }
+
+            try {
+                let updatedCount = 0;
+                let skippedCount = 0;
+
+                for (let row of results) {
+                    const rawId = row.id || row.Id || row.ID;
+                    const rawPrice = row.price || row.Price || row.PRICE;
+
+                    // id должен быть целым положительным числом
+                    const itemId = parseInt(rawId, 10);
+                    if (isNaN(itemId) || itemId <= 0 || String(itemId) !== String(rawId).trim()) {
+                        skippedCount++;
+                        continue;
+                    }
+
+                    // цена должна быть числом >= 0
+                    const parsedPrice = parseFloat(String(rawPrice).replace(',', '.'));
+                    if (isNaN(parsedPrice) || parsedPrice < 0) {
+                        skippedCount++;
+                        continue;
+                    }
+
+                    const result = await pool.query(
+                        'UPDATE items SET price = $1 WHERE id = $2',
+                        [parsedPrice, itemId]
+                    );
+                    if (result.rowCount > 0) {
+                        updatedCount++;
+                    } else {
+                        skippedCount++; // предмет с таким id не найден
                     }
                 }
-                fs.unlinkSync(req.file.path); // удаление временного файла
-                res.json({ message: 'цены успешно обновлены' });
+
+                fs.unlinkSync(req.file.path);
+                res.json({
+                    message: `обновлено ${updatedCount} позиций, пропущено ${skippedCount}`,
+                    updated: updatedCount,
+                    skipped: skippedCount,
+                });
             } catch (err) {
                 if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
                 res.status(500).json({ error: 'ошибка при обновлении цен в базе данных' });
             }
         })
-        .on('error', (err) => {
+        .on('error', () => {
             if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
             res.status(500).json({ error: 'ошибка при обработке файла' });
         });

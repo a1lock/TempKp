@@ -28,10 +28,12 @@ const Admin = () => {
     formData.append('file', file);
     
     try {
-      await api.post('/items/upload-prices', formData);
-      alert('база цен успешно обновлена');
-    } catch (e) {
-      alert('ошибка при загрузке прайс-листа');
+      const res = await api.post('/items/upload-prices', formData);
+      alert(res.data.message);
+      setFile(null);
+    } catch (e: any) {
+      const msg = e?.response?.data?.error || 'ошибка при загрузке прайс-листа';
+      alert(msg);
     }
   };
 
