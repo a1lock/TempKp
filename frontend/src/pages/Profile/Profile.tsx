@@ -7,10 +7,11 @@ const Profile = () => {
   const navigate = useNavigate();
 
   const handleLogout = () => {
-    logout();
+    logout(); // очищает localStorage и сбрасывает user в контексте
     navigate('/');
   };
 
+  // не рендерим страницу если пользователь не залогинен (ProtectedRoute должен это предотвращать)
   if (!user) return null;
 
   return (

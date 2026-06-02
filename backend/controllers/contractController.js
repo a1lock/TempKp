@@ -49,11 +49,13 @@ const calculateContract = async (req, res) => {
     const averageFloat = sumFloats / 10;
 
     const firstItem = dbItemsMap[items[0].id];
+    // контракт допускает только предметы одной редкости
     const allSameRarity = items.every(i => dbItemsMap[i.id]?.rarity === firstItem.rarity);
     if (!allSameRarity) {
       return res.status(400).json({ error: 'Все предметы контракта должны иметь одинаковую редкость' });
     }
 
+    // цепочка редкостей: Запрещённое → Засекреченное → Тайное
     let targetRarity = '';
     if (firstItem.rarity === 'Запрещенное') targetRarity = 'Засекреченное';
     else if (firstItem.rarity === 'Засекреченное') targetRarity = 'Тайное';
@@ -70,6 +72,8 @@ const calculateContract = async (req, res) => {
       return res.status(400).json({ error: 'Нет возможных исходов для данного контракта' });
     }
 
+    // определяем коллекцию по названию скина нужно для фильтрации результатов
+    // чтобы контракт из Dreams & Nightmares не давал предметы из Snakebite
     const getCollectionName = (marketName) => {
       if (/Ticket to Hell|Night Terror|Rapid Eye Movement|Abyssal Apparition|Starlight Protector/.test(marketName)) {
         return 'Dreams & Nightmares';
@@ -80,6 +84,7 @@ const calculateContract = async (req, res) => {
       return null;
     };
 
+    // в нашей БД для этих коллекций есть только FN, FT и BS MW и WW отсутствуют
     const getExteriorByFloat = (f) => {
       if (f < 0.15) return 'Factory New';
       if (f < 0.45) return 'Field-Tested';
@@ -98,6 +103,7 @@ const calculateContract = async (req, res) => {
     const outcomes = filteredOutputs.map(output => {
       const minF = Number(output.min_float);
       const maxF = Number(output.max_float);
+      // стандартная формула CS2: float результата = avgFloat * (max - min) + min
       const resultFloat = averageFloat * (maxF - minF) + minF;
       const profit = Number(output.price) - totalInputCost;
 
@@ -218,8 +224,4 @@ const getContractDetails = async (req, res) => {
   }
 };
 
-module.exports = {
-  calculateContract,
-  getContractHistory,
-  getContractDetails
-};
+module.exports = { calculateContract, getContractHistory, getContractDetails };

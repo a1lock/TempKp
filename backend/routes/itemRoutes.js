@@ -1,11 +1,16 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const { getItems, uploadPrices } = require('../controllers/itemController');
 const { verifyToken, requireAdmin } = require('../middleware/authMiddleware');
 
+const uploadDir = path.join(__dirname, '../uploads');
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
 const upload = multer({
-    dest: 'uploads/',
+    dest: uploadDir,
     limits: { fileSize: 2 * 1024 * 1024 }, // максимум 2 МБ
     fileFilter: (req, file, cb) => {
         const isCSV = file.mimetype === 'text/csv'

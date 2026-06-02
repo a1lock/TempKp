@@ -21,6 +21,7 @@ const Admin = () => {
     }
   };
 
+  // отправляет CSV как multipart/form-data бэкенд обновляет цены в БД
   const handleUpload = async () => {
     if (!file) return alert('сначала выберите csv файл');
     
@@ -37,6 +38,7 @@ const Admin = () => {
     }
   };
 
+  // защита от удаления самого себя есть и на фронте, и на бэке
   const handleDeleteUser = async (id: number) => {
     if (id === user?.id) {
       alert('нельзя удалить собственную учетную запись администратора');

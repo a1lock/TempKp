@@ -12,7 +12,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
 const AuthProvider = ({ children }: { children: ReactNode }) => {
-  // синхронно считываем данные из хранилища при инициализации состояния
+  // ленивая инициализация: читаем localStorage один раз при старте, а не на каждый ре-рендер
   const [user, setUser] = useState<User | null>(() => {
     const token = localStorage.getItem('token');
     const storedUser = localStorage.getItem('user');
@@ -26,6 +26,7 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
     return null;
   });
 
+  // сохраняем токен и данные пользователя axios подхватит токен из localStorage автоматически
   const login = (token: string, userData: User) => {
     localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(userData));

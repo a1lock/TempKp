@@ -1,7 +1,8 @@
 import axios from 'axios';
 
+// единый экземпляр axios все запросы идут через него, токен подставляется автоматически
 const api = axios.create({
-  baseURL: 'http://localhost:5000/api', 
+  baseURL: 'http://localhost:5000/api',
 });
 
 // подстановка токена в каждый запрос
@@ -13,7 +14,7 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// при протухшем токене — очищаем хранилище и редиректим на логин
+// при протухшем токене очищаем хранилище и редиректим на логин
 api.interceptors.response.use(
   (res) => res,
   (error) => {

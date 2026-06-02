@@ -8,6 +8,7 @@ const Market = () => {
   const [search, setSearch] = useState("");
   const [colorFilter, setColorFilter] = useState("");
   const [minPrice, setMinPrice] = useState<number>(0);
+  // Infinity вместо числа чтобы очищенное поле "до" не скрывало все товары
   const [maxPrice, setMaxPrice] = useState<number>(Infinity);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [selectedExteriors, setSelectedExteriors] = useState<string[]>([]);
@@ -20,6 +21,7 @@ const Market = () => {
       .catch(console.error);
   }, []);
 
+  // тогл: если тип уже выбран снимаем, иначе добавляем
   const handleTypeChange = (type: string) => {
     setSelectedTypes((prev) =>
       prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type],
@@ -42,6 +44,7 @@ const Market = () => {
     setSortOrder("asc");
   };
 
+  // вся фильтрация и сортировка на стороне клиента, данные загружаются один раз при монтировании
   const filteredItems = items.filter((item) => {
     const matchesSearch = item.market_name
       .toLowerCase()
@@ -252,7 +255,6 @@ const Market = () => {
                   style={{ backgroundColor: item.color_hex }}
                 />
                 <div className="flex-1 flex items-center justify-center p-4">
-                  {/* бокс-плейсхолдер по вайрфреймам */}
                   <div className="w-full h-full border border-gray-800 flex items-center justify-center relative bg-[#13141A]">
                     <div className="h-32 mb-4 flex items-center justify-center">
                       <img

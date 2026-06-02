@@ -10,6 +10,7 @@ interface HistoryItem {
   created_at: string;
 }
 
+// середина диапазона float для каждого качества подставляется по умолчанию при добавлении предмета в слот
 const EXTERIOR_MID_FLOAT: Record<string, number> = {
   "Factory New": 0.035,
   "Minimal Wear": 0.110,
@@ -18,6 +19,7 @@ const EXTERIOR_MID_FLOAT: Record<string, number> = {
   "Battle-Scarred": 0.725,
 };
 
+// только предметы из этих двух коллекций участвуют в контрактах на нашем сайте
 const CONTRACT_INPUT_KEYWORDS = [
   "Ticket to Hell", "Night Terror",
   "Rapid Eye Movement", "Abyssal Apparition",
@@ -34,6 +36,7 @@ interface ModalContract {
 
 const TradeUp = () => {
   const [items, setItems] = useState<Item[]>([]);
+  // 10 слотов для предметов и параллельный массив float-значений для каждого слота
   const [slots, setSlots] = useState<(Item | null)[]>(Array(10).fill(null));
   const [slotFloats, setSlotFloats] = useState<number[]>(Array(10).fill(0.15));
   const [history, setHistory] = useState<HistoryItem[]>([]);
@@ -121,6 +124,7 @@ const TradeUp = () => {
     }
   };
 
+  // клик по записи в истории открывает модалку с деталями вместо загрузки в слоты
   const handleLoadDetails = async (id: number) => {
     try {
       const res = await api.get(`/contracts/${id}`);
@@ -139,7 +143,8 @@ const TradeUp = () => {
     }
   };
 
-  // расчет возможных исходов для отображения карточек в прогнозе
+  // строит список карточек исходов на основе предметов в слотах и результата расчёта.
+  // считается на фронте, а не берётся с бэка чтобы шанс и EV совпадали с тем, что видит пользователь
   const getPossibleOutcomes = () => {
     if (result && result.outcomes) {
       return result.outcomes;
@@ -219,6 +224,7 @@ const TradeUp = () => {
       (sum, i) => sum + Number(i.price),
       0,
     );
+    // точная дробная вероятность округляется только при отображении, чтобы EV был точным
     const exactChance = 100 / possibleTargets.length;
 
     return possibleTargets.map((t) => ({
@@ -237,9 +243,11 @@ const TradeUp = () => {
   );
 
   const displayedOutcomes = getPossibleOutcomes();
+  // EV = сумма (вероятность * прибыль) по всем исходам
   const expectedProfit = displayedOutcomes.length > 0
     ? Math.round(displayedOutcomes.reduce((sum, o) => sum + (o.chance / 100) * o.profit, 0))
     : result?.expected_profit ?? 0;
+  // шанс успеха = доля исходов, где прибыль > 0
   const successChance = displayedOutcomes.length > 0
     ? Math.round((displayedOutcomes.filter(o => o.profit > 0).length / displayedOutcomes.length) * 100)
     : result?.success_chance ?? 0;

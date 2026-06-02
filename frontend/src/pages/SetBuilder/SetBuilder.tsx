@@ -39,7 +39,7 @@ const SetBuilder = () => {
 
     try {
       if (editingId) {
-        // если режим редактирования — отправляем PUT-запрос
+        // если режим редактирования отправляем PUT-запрос
         await api.put(`/collections/${editingId}`, { title, itemIds });
         alert("комплект успешно обновлен");
         setEditingId(null);
@@ -57,6 +57,7 @@ const SetBuilder = () => {
     }
   };
 
+  // загружает существующий комплект в редактор и скроллит наверх
   const handleEditLoad = async (col: Collection) => {
     try {
       const res = await api.get(`/collections/${col.id}`);
@@ -85,6 +86,7 @@ const SetBuilder = () => {
     }
   };
 
+  // генерирует CSV прямо в браузере через data URI и скачивает файл
   const handleExportCSV = () => {
     if (selectedItems.length === 0) return alert("нет предметов для выгрузки");
     const csvContent =
@@ -127,6 +129,7 @@ const SetBuilder = () => {
     (sum, item) => sum + Number(item.price),
     0,
   );
+  // берём середину диапазона float каждого предмета как приближённое значение
   const averageFloat =
     selectedItems.length > 0
       ? (
@@ -137,6 +140,7 @@ const SetBuilder = () => {
         ).toFixed(3)
       : "0.000";
 
+  // фильтр для модального окна: по категории, поиску и уже не выбранной модели
   const filteredModalItems = items.filter((item) => {
     // отсекаем качество в скобках, оставляя только модель: "AK-47 | Slate"
     const itemBaseName = item.market_name.split(" (")[0];
@@ -314,7 +318,6 @@ const SetBuilder = () => {
           </aside>
         </div>
 
-        {/* сохраненные наборы внизу по вайрфреймам */}
         <section className="bg-[#1A1B23] p-6 rounded-xl border border-gray-800 mt-8">
           <h3 className="text-white font-bold text-lg mb-6">
             Сохраненные комплекты предметов

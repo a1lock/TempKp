@@ -36,17 +36,18 @@ const createCollection = async (req, res) => {
         return res.status(400).json({ error: 'название сборки не может быть пустым' });
     }
 
-    const client = await pool.connect(); // получаем клиента для транзакции
+    // pool.connect() даёт нам конкретное соединение нужно, чтобы BEGIN/COMMIT/ROLLBACK работали в одной сессии
+    const client = await pool.connect();
     try {
         await client.query('BEGIN');
 
-        // проверяем предметы на уникальность базовых названий (без учета износа)
+        // запрещаем добавлять два разных износа одного скина (например, FN и FT одного AK)
         if (itemIds && itemIds.length > 0) {
             const itemsData = await client.query('SELECT market_name FROM items WHERE id = ANY($1::bigint[])', [itemIds]);
             const baseNames = [];
 
             for (let row of itemsData.rows) {
-                // отрезаем качество в скобках (например, "AK-47 | Slate")
+                // базовое имя всё до скобки с износом: "AK-47 | Slate (Field-Tested)" -> "AK-47 | Slate"
                 const baseName = row.market_name.split(' (')[0];
                 
                 if (baseNames.includes(baseName)) {
@@ -77,6 +78,7 @@ const createCollection = async (req, res) => {
         const collectionId = newCol.rows[0].id;
 
         if (itemIds && itemIds.length > 0) {
+            // Set убирает дубли на случай, если клиент случайно прислал один id дважды
             const uniqueItemIds = [...new Set(itemIds)];
             for (let itemId of uniqueItemIds) {
                 await client.query(
@@ -89,9 +91,11 @@ const createCollection = async (req, res) => {
         await client.query('COMMIT');
         res.status(201).json({ id: collectionId, title, message: 'сборка успешно создана' });
     } catch (err) {
+        // откатываем все изменения либо всё сохраняется целиком, либо ничего
         await client.query('ROLLBACK');
         res.status(500).json({ error: 'ошибка при создании сборки' });
     } finally {
+        // release() обязателен в finally возвращает соединение в пул даже при ошибке
         client.release();
     }
 };
@@ -153,6 +157,7 @@ const updateCollection = async (req, res) => {
         }
 
         if (itemIds) {
+            // проще удалить все связи и вставить заново, чем вычислять diff
             await client.query('DELETE FROM collection_items WHERE collection_id = $1', [id]);
             const uniqueItemIds = [...new Set(itemIds)];
             for (let itemId of uniqueItemIds) {
@@ -205,6 +210,7 @@ const exportCollectionToCSV = async (req, res) => {
         }
 
         res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        // Content-Disposition: attachment говорит браузеру скачать файл, а не показывать его
         res.setHeader('Content-Disposition', `attachment; filename=collection_${id}.csv`);
         res.status(200).send(csvContent);
     } catch (err) {

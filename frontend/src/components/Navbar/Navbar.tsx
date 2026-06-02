@@ -4,8 +4,10 @@ import { AuthContext } from '../../context/AuthContext';
 
 const Navbar = () => {
   const { user } = useContext(AuthContext);
+  // menuOpen управляет видимостью мобильного меню
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // закрываем меню при переходе по ссылке
   const closeMenu = () => setMenuOpen(false);
 
   return (

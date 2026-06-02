@@ -21,10 +21,12 @@ const register = async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const hash = await bcrypt.hash(password, salt);
 
+        // RETURNING возвращает поля новой записи без повторного SELECT
         const newUser = await pool.query(
             'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, role',
             [email, hash]
         );
+        // генерируем токен сразу чтобы пользователь был залогинен сразу после регистрации
         const { id, email: userEmail, role } = newUser.rows[0];
         const token = jwt.sign({ id, role }, process.env.JWT_SECRET, { expiresIn: '24h' });
         res.status(201).json({ token, user: { id, email: userEmail, role } });
@@ -49,13 +51,14 @@ const login = async (req, res) => {
         const user = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
         if (user.rows.length === 0) return res.status(404).json({ error: 'пользователь не найден' });
 
+        // bcrypt.compare безопасно сравнивает строку с хешем пароль в открытом виде нигде не хранится
         const validPassword = await bcrypt.compare(password, user.rows[0].password_hash);
         if (!validPassword) return res.status(400).json({ error: 'неверный пароль' });
 
         const token = jwt.sign(
             { id: user.rows[0].id, role: user.rows[0].role },
             process.env.JWT_SECRET,
-            { expiresIn: '24h' }
+            { expiresIn: '24h' } // токен живёт 24 часа, потом axios-интерцептор редиректит на /login
         );
 
         res.json({ token, user: { id: user.rows[0].id, email: user.rows[0].email, role: user.rows[0].role } });

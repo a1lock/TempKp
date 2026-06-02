@@ -51,12 +51,11 @@ const uploadPrices = (req, res) => {
     fs.createReadStream(req.file.path)
         .pipe(csv())
         .on('headers', (headers) => {
-            // проверяем наличие обязательных колонок (без учёта регистра)
             const normalized = headers.map(h => h.toLowerCase().trim());
             const hasId = normalized.includes('id');
             const hasPrice = normalized.includes('price');
             if (!hasId || !hasPrice) {
-                // записываем флаг ошибки — поток уже открыт, прервать нельзя
+                // нельзя бросить ошибку внутри потока вместо этого ставим флаг и проверяем в 'end'
                 results._invalidHeaders = true;
             }
         })
